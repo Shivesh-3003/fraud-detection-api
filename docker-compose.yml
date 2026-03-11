@@ -1,0 +1,79 @@
+# ==============================================================================
+# FRAUD DETECTION SYSTEM - DOCKER COMPOSE
+# ==============================================================================
+# This file orchestrates both services:
+# - Go API Orchestrator (port 8080) - handles requests, alerting
+# - Python ML Service (port 8000) - model inference, SHAP explanations
+#
+# Usage:
+#   docker-compose up --build
+#
+# Prerequisites:
+#   Place your trained models in ./python-ml-service/models/
+#   - autoencoder_model.pth
+#   - mlp_classifier.pth
+#   - scaler.pkl
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Go API Orchestrator
+  # ----------------------------------------------------------------------------
+  go-api:
+    build:
+      context: ./go-api
+      dockerfile: Dockerfile
+    container_name: fraud-detection-api
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENV=development
+      # ML Service connection
+      - ML_SERVICE_URL=http://ml-service:8000
+      - ML_SERVICE_TIMEOUT=10s
+      # Fraud detection settings
+      - FRAUD_THRESHOLD=0.5
+      - ALERT_ON_FRAUD=true
+      # Uncomment and configure for Slack alerts:
+      # - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
+    depends_on:
+      ml-service:
+        condition: service_healthy
+    networks:
+      - fraud-detection-network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # Python ML Service
+  # ----------------------------------------------------------------------------
+  ml-service:
+    build:
+      context: ./python-ml-service
+      dockerfile: Dockerfile
+    container_name: fraud-ml-service
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/models
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount your trained model files
+      # Expected files: autoencoder_model.pth, mlp_classifier.pth, scaler.pkl
+      - ./python-ml-service/models:/app/models:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s  # Allow time for model loading
+    networks:
+      - fraud-detection-network
+    restart: unless-stopped
+
+# ==============================================================================
+# Network
+# ==============================================================================
+networks:
+  fraud-detection-network:
+    driver: bridge
