@@ -16,24 +16,31 @@ import (
 )
 
 func main() {
+	// 1. Load config
 	cfg := config.Load()
 	log.Printf("Starting Fraud Detection API (env: %s)", cfg.Env)
 
+	// 2. Create service dependencies
 	mlClient := services.NewMLClient(cfg.MLServiceURL, cfg.MLServiceTimeout)
 	alertService := services.NewAlertService(cfg.SlackWebhookURL)
+
+	// 3. Create handler (injecting dependencies)
 	h := handlers.NewHandler(cfg, mlClient, alertService)
 
+	// 4. Register routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", h.HealthCheck)
 	mux.HandleFunc("POST /api/v1/predict", h.Predict)
 	mux.HandleFunc("POST /api/v1/batch", h.BatchPredict)
 	mux.HandleFunc("POST /api/v1/explain", h.Explain)
 
+	// 5. Wrap with middleware (applied in reverse order)
 	var handler http.Handler = mux
 	handler = middleware.Logging(handler)
 	handler = middleware.CORS(handler)
 	handler = middleware.Recovery(handler)
 
+	// 6. Create and start the server
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      handler,
@@ -49,6 +56,7 @@ func main() {
 		}
 	}()
 
+	// 7. Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

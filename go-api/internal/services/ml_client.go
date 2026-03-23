@@ -57,7 +57,7 @@ func (c *MLClient) HealthCheck(ctx context.Context) error {
 
 func (c *MLClient) post(ctx context.Context, path string, reqBody interface{}) (*models.MLPredictResponse, error) {
 	url := c.baseURL + path
-	jsonBody, err := json.Marshal(reqBody)
+	jsonBody, err := json.Marshal(reqBody) // serialize Go struct -> JSON bytes
 	if err != nil {
 		return nil, fmt.Errorf("marshaling request: %w", err)
 	}
@@ -66,16 +66,16 @@ func (c *MLClient) post(ctx context.Context, path string, reqBody interface{}) (
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.httpClient.Do(httpReq) // actually send the HTTP request
 	if err != nil {
 		return nil, fmt.Errorf("calling ML service: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK { // ensure the request body is always closed
 		return nil, fmt.Errorf("ML service returned status %d", resp.StatusCode)
 	}
 	var mlResp models.MLPredictResponse
-	if err := json.NewDecoder(resp.Body).Decode(&mlResp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&mlResp); err != nil { // deserialize JSON bytes -> go struct
 		return nil, fmt.Errorf("decoding ML response: %w", err)
 	}
 	return &mlResp, nil
