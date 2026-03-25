@@ -149,38 +149,6 @@ class FraudExplainer:
         
         return shap_dict, base_value
     
-    def get_top_contributors(
-        self,
-        shap_values: Dict[str, float],
-        top_n: int = 5
-    ) -> list[Dict]:
-        """
-        Get the top contributing features sorted by absolute SHAP value.
-        
-        Args:
-            shap_values: Dict from explain()
-            top_n: Number of top features to return
-            
-        Returns:
-            List of dicts with 'feature', 'contribution', 'direction' keys
-        """
-        # Sort by absolute value
-        sorted_features = sorted(
-            shap_values.items(),
-            key=lambda x: abs(x[1]),
-            reverse=True
-        )
-        
-        contributions = []
-        for feature, value in sorted_features[:top_n]:
-            contributions.append({
-                "feature": feature,
-                "contribution": value,
-                "direction": "increases_fraud" if value > 0 else "decreases_fraud"
-            })
-        
-        return contributions
-
 
 # Global explainer instance
 _explainer: Optional[FraudExplainer] = None

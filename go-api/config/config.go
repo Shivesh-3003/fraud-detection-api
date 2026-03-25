@@ -15,6 +15,8 @@ type Config struct {
 	AlertEmail       string
 	SMTPHost         string
 	SMTPPort         string
+	SMTPUsername     string
+	SMTPPassword     string
 	AlertOnFraud     bool
 	FraudThreshold   float64
 }
@@ -29,6 +31,8 @@ func Load() *Config {
 		AlertEmail:       getEnv("ALERT_EMAIL", ""),
 		SMTPHost:         getEnv("SMTP_HOST", ""),
 		SMTPPort:         getEnv("SMTP_PORT", "587"),
+		SMTPUsername:     getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:     getEnv("SMTP_PASSWORD", ""),
 		AlertOnFraud:     getBoolEnv("ALERT_ON_FRAUD", true),
 		FraudThreshold:   getFloatEnv("FRAUD_THRESHOLD", 0.5),
 	}

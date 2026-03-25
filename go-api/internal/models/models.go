@@ -55,6 +55,8 @@ type BatchPredictRequest struct {
 
 type ExplainRequest struct {
 	TransactionID string              `json:"transaction_id"`
+	Amount        float64             `json:"amount"`
+	Time          float64             `json:"time"`
 	Features      TransactionFeatures `json:"features"`
 }
 
@@ -67,6 +69,7 @@ type Prediction struct {
 
 type FeatureContribution struct {
 	Feature      string  `json:"feature"`
+	Label        string  `json:"label"`
 	Contribution float64 `json:"contribution"`
 	Direction    string  `json:"direction"`
 }
@@ -96,6 +99,7 @@ type BatchSummary struct {
 type BatchPredictResponse struct {
 	Results          []PredictResponse `json:"results"`
 	Summary          BatchSummary      `json:"summary"`
+	AlertSent        bool              `json:"alert_sent,omitempty"`
 	ProcessingTimeMs float64           `json:"processing_time_ms"`
 }
 

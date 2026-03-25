@@ -13,7 +13,7 @@ import joblib
 from sklearn.preprocessing import StandardScaler
 
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "python-ml-service"))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from app.ml_models import Autoencoder, FraudClassifier
 from app.inference import (

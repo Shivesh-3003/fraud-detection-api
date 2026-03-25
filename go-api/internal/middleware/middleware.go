@@ -43,7 +43,9 @@ func Recovery(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Printf("PANIC: %v", err)
-				http.Error(w, `{"error":{"code":"INTERNAL_ERROR","message":"Internal server error"}}`, http.StatusInternalServerError)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error":{"code":"INTERNAL_ERROR","message":"Internal server error"}}`)) //nolint:errcheck
 			}
 		}()
 		next.ServeHTTP(w, r)

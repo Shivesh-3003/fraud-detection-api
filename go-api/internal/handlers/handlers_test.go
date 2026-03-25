@@ -12,6 +12,11 @@ import (
 	"fraud-detection-api/internal/services"
 )
 
+// noAlertCfg returns a Config with no alert destinations (Slack/email disabled).
+func noAlertCfg() *config.Config {
+	return &config.Config{FraudThreshold: 0.5}
+}
+
 // VALIDATION TESTS
 func TestValidatePredictRequest_MissingID(t *testing.T) {
 	req := &models.PredictRequest{
@@ -124,9 +129,9 @@ func TestHealthCheck_Healthy(t *testing.T) {
 	ml := mockMLServer(t)
 	defer ml.Close()
 
-	cfg := &config.Config{FraudThreshold: 0.5}
+	cfg := noAlertCfg()
 	mlClient := services.NewMLClient(ml.URL, 5e9) // 5 second timeout
-	h := NewHandler(cfg, mlClient, services.NewAlertService(""))
+	h := NewHandler(cfg, mlClient, services.NewAlertService(cfg))
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -152,8 +157,8 @@ func TestHealthCheck_Degraded(t *testing.T) {
 	ml := mockMLDegraded(t)
 	defer ml.Close()
 
-	cfg := &config.Config{FraudThreshold: 0.5}
-	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(""))
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -190,12 +195,27 @@ func mockMLPredict(t *testing.T, probability float64) *httptest.Server {
 	}))
 }
 
+// mockMLPredictWithSHAP returns a canned prediction that includes SHAP values.
+func mockMLPredictWithSHAP(t *testing.T, probability float64) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := models.MLPredictResponse{
+			FraudProbability:    probability,
+			ReconstructionError: 0.0042,
+			ShapValues:          map[string]float64{"V1": 0.12, "V14": -0.08, "Amount_Log": 0.05},
+			BaseValue:           0.03,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+}
+
 func TestPredict_InvalidJSON(t *testing.T) {
 	ml := mockMLPredict(t, 0.1)
 	defer ml.Close()
 
-	cfg := &config.Config{FraudThreshold: 0.5}
-	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(""))
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/predict", strings.NewReader("not json"))
 	rec := httptest.NewRecorder()
@@ -211,8 +231,8 @@ func TestPredict_LegitimateTransaction(t *testing.T) {
 	ml := mockMLPredict(t, 0.02) // low probability → not fraud
 	defer ml.Close()
 
-	cfg := &config.Config{FraudThreshold: 0.5}
-	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(""))
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
 
 	body := `{
 		"transaction_id": "txn_001",
@@ -252,8 +272,8 @@ func TestPredict_FraudulentTransaction(t *testing.T) {
 	ml := mockMLPredict(t, 0.92) // high probability → fraud
 	defer ml.Close()
 
-	cfg := &config.Config{FraudThreshold: 0.5}
-	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(""))
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
 
 	body := `{
 		"transaction_id": "txn_fraud",
@@ -290,8 +310,8 @@ func TestPredict_MLUnavailable(t *testing.T) {
 	ml := mockMLPredict(t, 0.02)
 	ml.Close() // close immediately so all requests fail
 
-	cfg := &config.Config{FraudThreshold: 0.5}
-	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(""))
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
 
 	body := `{"transaction_id":"txn_001","amount":100.0,"time":0}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/predict", strings.NewReader(body))
@@ -317,8 +337,8 @@ func TestBatchPredict_MultipleTransactions(t *testing.T) {
 	ml := mockMLPredict(t, 0.02) // all legitimate
 	defer ml.Close()
 
-	cfg := &config.Config{FraudThreshold: 0.5}
-	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(""))
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
 
 	body := `{"transactions":[` + minimalTxnJSON("txn_001") + `,` + minimalTxnJSON("txn_002") + `]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/batch", strings.NewReader(body))
@@ -344,12 +364,43 @@ func TestBatchPredict_MultipleTransactions(t *testing.T) {
 	}
 }
 
+func TestBatchPredict_MixedTransactions(t *testing.T) {
+	ml := mockMLPredict(t, 0.92) // all flagged as fraud
+	defer ml.Close()
+
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
+
+	body := `{"transactions":[` + minimalTxnJSON("txn_a") + `,` + minimalTxnJSON("txn_b") + `]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/batch", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.BatchPredict(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp models.BatchPredictResponse
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp.Summary.Total != 2 {
+		t.Errorf("expected total=2, got %d", resp.Summary.Total)
+	}
+	if resp.Summary.Fraudulent != 2 {
+		t.Errorf("expected fraudulent=2, got %d", resp.Summary.Fraudulent)
+	}
+	if resp.Summary.Legitimate != 0 {
+		t.Errorf("expected legitimate=0, got %d", resp.Summary.Legitimate)
+	}
+}
+
 func TestBatchPredict_TooMany(t *testing.T) {
 	ml := mockMLPredict(t, 0.02)
 	defer ml.Close()
 
-	cfg := &config.Config{FraudThreshold: 0.5}
-	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(""))
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
 
 	// build 101 transaction objects
 	txns := make([]string, 101)
@@ -365,5 +416,104 @@ func TestBatchPredict_TooMany(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for >100 transactions, got %d", rec.Code)
+	}
+}
+
+// EXPLAIN HANDLER TESTS
+
+func TestExplain_InvalidJSON(t *testing.T) {
+	ml := mockMLPredictWithSHAP(t, 0.85)
+	defer ml.Close()
+
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/explain", strings.NewReader("not json"))
+	rec := httptest.NewRecorder()
+
+	h.Explain(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for bad JSON, got %d", rec.Code)
+	}
+}
+
+func TestExplain_MissingTransactionID(t *testing.T) {
+	ml := mockMLPredictWithSHAP(t, 0.85)
+	defer ml.Close()
+
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
+
+	body := `{"transaction_id":"","amount":100.0,"time":0,"features":{}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/explain", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.Explain(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing transaction_id, got %d", rec.Code)
+	}
+}
+
+func TestExplain_ReturnsShapValues(t *testing.T) {
+	ml := mockMLPredictWithSHAP(t, 0.85)
+	defer ml.Close()
+
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
+
+	body := `{
+		"transaction_id": "txn_explain",
+		"amount": 149.62,
+		"time": 3600,
+		"features": {
+			"V1":-1.35,"V2":-0.07,"V3":2.53,"V4":1.37,"V5":-0.33,
+			"V6":0.46,"V7":0.23,"V8":0.09,"V9":0.36,"V10":0.09,
+			"V11":-0.55,"V12":-0.61,"V13":-0.99,"V14":-0.31,"V15":1.46,
+			"V16":-0.47,"V17":0.20,"V18":0.02,"V19":0.40,"V20":0.25,
+			"V21":-0.01,"V22":0.27,"V23":-0.11,"V24":0.06,"V25":0.12,
+			"V26":-0.18,"V27":0.13,"V28":-0.02
+		}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/explain", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.Explain(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp models.ExplainResponse
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp.TransactionID != "txn_explain" {
+		t.Errorf("expected transaction_id 'txn_explain', got %q", resp.TransactionID)
+	}
+	if len(resp.Explanation.ShapValues) == 0 {
+		t.Error("expected non-empty shap_values in explanation")
+	}
+	if len(resp.Explanation.TopFeatures) == 0 {
+		t.Error("expected non-empty top_features in explanation")
+	}
+}
+
+func TestExplain_MLUnavailable(t *testing.T) {
+	ml := mockMLPredictWithSHAP(t, 0.85)
+	ml.Close() // close immediately
+
+	cfg := noAlertCfg()
+	h := NewHandler(cfg, services.NewMLClient(ml.URL, 5e9), services.NewAlertService(cfg))
+
+	body := `{"transaction_id":"txn_001","amount":100.0,"time":0}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/explain", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.Explain(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when ML service unreachable, got %d", rec.Code)
 	}
 }

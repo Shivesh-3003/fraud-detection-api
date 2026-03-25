@@ -279,27 +279,6 @@ class FraudDetectionPipeline:
             results.append((prob, error))
         return results
     
-    def get_classifier_input_for_shap(
-        self,
-        v_features: list[float],
-        amount: float,
-        time: float
-    ) -> np.ndarray:
-        """
-        Get the 32-feature vector that would be fed to the classifier.
-        
-        This is useful for SHAP explanations - we explain the classifier's
-        decision based on these 32 features.
-        
-        Args:
-            v_features, amount, time: Same as predict()
-            
-        Returns:
-            numpy array of shape (32,)
-        """
-        _, _, classifier_input = self.predict(v_features, amount, time)
-        return classifier_input
-    
     def is_ready(self) -> bool:
         """Check if pipeline is ready for predictions."""
         return self._models_loaded

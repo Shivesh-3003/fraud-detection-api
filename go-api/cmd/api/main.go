@@ -22,7 +22,7 @@ func main() {
 
 	// 2. Create service dependencies
 	mlClient := services.NewMLClient(cfg.MLServiceURL, cfg.MLServiceTimeout)
-	alertService := services.NewAlertService(cfg.SlackWebhookURL)
+	alertService := services.NewAlertService(cfg)
 
 	// 3. Create handler (injecting dependencies)
 	h := handlers.NewHandler(cfg, mlClient, alertService)

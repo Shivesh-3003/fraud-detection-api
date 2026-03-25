@@ -35,8 +35,7 @@ services:
       # Fraud detection settings
       - FRAUD_THRESHOLD=0.5
       - ALERT_ON_FRAUD=true
-      # Uncomment and configure for Slack alerts:
-      # - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
     depends_on:
       ml-service:
         condition: service_healthy
