@@ -41,7 +41,7 @@ func (s *AlertService) IsConfigured() bool {
 	return s.slackWebhookURL != "" || (s.alertEmail != "" && s.smtpHost != "")
 }
 
-// ── Slack types ──────────────────────────────────────────────────────────────
+// Slack types
 
 type SlackMessage struct {
 	Text        string       `json:"text"`
@@ -61,7 +61,7 @@ type Field struct {
 	Short bool   `json:"short"`
 }
 
-// ── Single-transaction fraud alert ──────────────────────────────────────────
+// Single-transaction fraud alert
 
 func (s *AlertService) SendFraudAlert(ctx context.Context, txnID string, prediction models.Prediction, explanation *models.Explanation) error {
 	body := s.buildSingleAlertBody(txnID, prediction, explanation)
@@ -82,7 +82,7 @@ func (s *AlertService) SendFraudAlert(ctx context.Context, txnID string, predict
 				},
 			}},
 		}
-		if err := s.sendSlackMessage(ctx, msg); err != nil {
+		if err := s.sendSlackMessage(context.Background(), msg); err != nil {
 			log.Printf("Slack alert failed for %s: %v", txnID, err)
 			errs = append(errs, "slack: "+err.Error())
 		}
@@ -102,7 +102,7 @@ func (s *AlertService) SendFraudAlert(ctx context.Context, txnID string, predict
 	return nil
 }
 
-// ── Batch summary alert ───────────────────────────────────────────────────────
+// Batch summary alert
 
 func (s *AlertService) SendBatchFraudAlert(ctx context.Context, total int, fraudResults []models.PredictResponse) error {
 	if len(fraudResults) == 0 {
@@ -110,8 +110,23 @@ func (s *AlertService) SendBatchFraudAlert(ctx context.Context, total int, fraud
 	}
 
 	var lines []string
+	var attachments []Attachment
 	for _, r := range fraudResults {
 		lines = append(lines, fmt.Sprintf("• %s — %.1f%% probability", r.TransactionID, r.Prediction.FraudProbability*100))
+
+		fields := []Field{
+			{Title: "Fraud Probability", Value: fmt.Sprintf("%.2f%%", r.Prediction.FraudProbability*100), Short: true},
+			{Title: "Confidence", Value: r.Prediction.Confidence, Short: true},
+			{Title: "Anomaly Score", Value: fmt.Sprintf("%.4f", r.Prediction.ReconstructionError), Short: true},
+		}
+		if r.Explanation != nil {
+			fields = append(fields, Field{Title: "Why This Was Flagged", Value: s.buildExplanationText(r.Explanation), Short: false})
+		}
+		attachments = append(attachments, Attachment{
+			Color:  "#FF0000",
+			Title:  fmt.Sprintf("Transaction: %s", r.TransactionID),
+			Fields: fields,
+		})
 	}
 	summary := fmt.Sprintf("🚨 Batch Fraud Alert — %d of %d transactions flagged\n%s",
 		len(fraudResults), total, strings.Join(lines, "\n"))
@@ -120,14 +135,10 @@ func (s *AlertService) SendBatchFraudAlert(ctx context.Context, total int, fraud
 
 	if s.slackWebhookURL != "" {
 		msg := SlackMessage{
-			Text: summary,
-			Attachments: []Attachment{{
-				Color: "#FF0000",
-				Title: fmt.Sprintf("%d/%d transactions flagged as fraudulent", len(fraudResults), total),
-				Text:  strings.Join(lines, "\n"),
-			}},
+			Text:        summary,
+			Attachments: attachments,
 		}
-		if err := s.sendSlackMessage(ctx, msg); err != nil {
+		if err := s.sendSlackMessage(context.Background(), msg); err != nil {
 			log.Printf("Slack batch alert failed: %v", err)
 			errs = append(errs, "slack: "+err.Error())
 		}
@@ -147,7 +158,7 @@ func (s *AlertService) SendBatchFraudAlert(ctx context.Context, total int, fraud
 	return nil
 }
 
-// ── Internal helpers ─────────────────────────────────────────────────────────
+// Internal helpers
 
 func (s *AlertService) buildExplanationText(explanation *models.Explanation) string {
 	if explanation == nil || len(explanation.TopFeatures) == 0 {

@@ -173,6 +173,8 @@ func (h *Handler) BatchPredict(w http.ResponseWriter, r *http.Request) {
 	fraudCount := 0
 
 	for _, txn := range req.Transactions {
+		txnStart := time.Now()
+
 		mlReq := &models.MLPredictRequest{Features: txn.Features.ToSlice(), Amount: txn.Amount, Time: txn.Time}
 
 		mlResp, err := h.mlClient.Predict(ctx, mlReq)
@@ -197,9 +199,11 @@ func (h *Handler) BatchPredict(w http.ResponseWriter, r *http.Request) {
 			ReconstructionError: mlResp.ReconstructionError,
 		}
 		result := models.PredictResponse{
-			TransactionID:   txn.TransactionID,
-			Prediction:      prediction,
-			InferenceTimeMs: mlResp.InferenceTimeMs,
+			TransactionID:    txn.TransactionID,
+			Prediction:       prediction,
+			InferenceTimeMs:  mlResp.InferenceTimeMs,
+			ProcessingTimeMs: float64(time.Since(txnStart).Microseconds()) / 1000.0,
+			Timestamp:        time.Now().UTC(),
 		}
 		if isFraud {
 			fraudCount++

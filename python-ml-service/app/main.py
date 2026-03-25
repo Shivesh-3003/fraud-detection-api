@@ -15,6 +15,7 @@ Architecture:
 
 import logging
 import time
+import numpy as np
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -23,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .models import PredictRequest, PredictResponse, HealthResponse, ErrorResponse
 from .inference import get_pipeline, FraudDetectionPipeline, AUTOENCODER_INPUT_DIM, CLASSIFIER_INPUT_DIM
-from .explainer import get_explainer, FraudExplainer
+from .explainer import FraudExplainer
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +37,28 @@ logger = logging.getLogger(__name__)
 pipeline: Optional[FraudDetectionPipeline] = None
 explainer: Optional[FraudExplainer] = None
 
+def _build_background_data(pipe: FraudDetectionPipeline, n_samples: int = 100) -> np.ndarray:
+    """
+    Generate synthetic background data for SHAP from the fitted scaler.
+    Instead of using zeros, we sample from N(0,1) per feature (what
+    StandardScaler produces for normal data), then run through the
+    autoencoder to get realistic reconstruction errors.
+    """
+    import torch
+
+    np.random.seed(42)
+    scaled_samples = np.random.randn(n_samples, AUTOENCODER_INPUT_DIM).astype(np.float32)
+
+    pipe.autoencoder.eval()
+    with torch.no_grad():
+        tensor = torch.tensor(scaled_samples, dtype=torch.float32)
+        errors = pipe.autoencoder.get_reconstruction_error(tensor).numpy()
+
+    background = np.column_stack([scaled_samples, errors])
+
+    logger.info(f"Generated SHAP background data: {background.shape} "
+                f"(mean recon error: {errors.mean():.4f})")
+    return background
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,8 +79,13 @@ async def lifespan(app: FastAPI):
         logger.info("✓ Inference pipeline loaded")
         
         logger.info("[2/2] Initializing SHAP explainer...")
-        explainer = get_explainer(pipeline.classifier)
-        logger.info("✓ SHAP explainer initialized")
+        background = _build_background_data(pipeline, n_samples=100)
+        explainer = FraudExplainer(
+            classifier=pipeline.classifier,
+            background_data=background,
+            n_background_samples=100
+        )
+        logger.info("✓ SHAP explainer initialized with training-derived background data")
         
         logger.info("="*60)
         logger.info("ML SERVICE READY")
