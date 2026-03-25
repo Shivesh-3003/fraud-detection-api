@@ -13,14 +13,6 @@ import (
 )
 
 // Feature interpretation mapping
-// Maps anonymous PCA features to human-readable labels for compliance teams.
-// In production with named features, this layer would not be needed — SHAP
-// values would directly reference real feature names. This mapping demonstrates
-// the system's explainability capability using the anonymised Kaggle dataset.
-//
-// Interpretations are based on published analysis of the ULB credit card
-// dataset's PCA components and their statistical behaviour in fraud vs normal
-// transactions.
 var featureLabels = map[string]string{
 	"V14":                  "Transaction velocity anomaly",
 	"V12":                  "Merchant category deviation",
@@ -106,7 +98,7 @@ func (h *Handler) Predict(w http.ResponseWriter, r *http.Request) {
 		Time:     req.Time,
 	}
 
-	// Step 1: Fast prediction WITHOUT SHAP (~1-2ms)
+	// Step 1: Fast prediction WITHOUT SHAP
 	mlResp, err := h.mlClient.Predict(ctx, mlReq)
 	if err != nil {
 		log.Printf("ML service error: %v", err)
@@ -116,7 +108,7 @@ func (h *Handler) Predict(w http.ResponseWriter, r *http.Request) {
 
 	isFraud := mlResp.FraudProbability >= h.config.FraudThreshold
 
-	// Step 2: Only compute SHAP if fraud detected (~20-50ms, but only ~0.17% of traffic)
+	// Step 2: Only compute SHAP if fraud detected
 	if isFraud {
 		mlRespExplained, err := h.mlClient.PredictWithExplanation(ctx, mlReq)
 		if err != nil {
@@ -136,6 +128,7 @@ func (h *Handler) Predict(w http.ResponseWriter, r *http.Request) {
 	resp := models.PredictResponse{
 		TransactionID:    req.TransactionID,
 		Prediction:       prediction,
+		InferenceTimeMs:  mlResp.InferenceTimeMs,
 		ProcessingTimeMs: float64(time.Since(start).Microseconds()) / 1000.0,
 		Timestamp:        time.Now().UTC(),
 	}
@@ -182,7 +175,6 @@ func (h *Handler) BatchPredict(w http.ResponseWriter, r *http.Request) {
 	for _, txn := range req.Transactions {
 		mlReq := &models.MLPredictRequest{Features: txn.Features.ToSlice(), Amount: txn.Amount, Time: txn.Time}
 
-		// Step 1: Fast prediction without SHAP
 		mlResp, err := h.mlClient.Predict(ctx, mlReq)
 		if err != nil {
 			log.Printf("ML service error for txn %s: %v", txn.TransactionID, err)
@@ -191,7 +183,6 @@ func (h *Handler) BatchPredict(w http.ResponseWriter, r *http.Request) {
 
 		isFraud := mlResp.FraudProbability >= h.config.FraudThreshold
 
-		// Step 2: Only request SHAP for fraud transactions
 		if isFraud {
 			mlRespExplained, err := h.mlClient.PredictWithExplanation(ctx, mlReq)
 			if err == nil {
@@ -205,7 +196,11 @@ func (h *Handler) BatchPredict(w http.ResponseWriter, r *http.Request) {
 			Confidence:          getConfidenceLevel(mlResp.FraudProbability),
 			ReconstructionError: mlResp.ReconstructionError,
 		}
-		result := models.PredictResponse{TransactionID: txn.TransactionID, Prediction: prediction}
+		result := models.PredictResponse{
+			TransactionID:   txn.TransactionID,
+			Prediction:      prediction,
+			InferenceTimeMs: mlResp.InferenceTimeMs,
+		}
 		if isFraud {
 			fraudCount++
 			result.Explanation = buildExplanation(mlResp)
@@ -277,8 +272,6 @@ func getConfidenceLevel(probability float64) string {
 	return "low"
 }
 
-// getFeatureLabel returns a human-readable label for a feature name.
-// Falls back to the original feature name if no mapping exists.
 func getFeatureLabel(feature string) string {
 	if label, ok := featureLabels[feature]; ok {
 		return label
@@ -319,7 +312,6 @@ func buildExplanation(mlResp *models.MLPredictResponse) *models.Explanation {
 	}
 	topFeatures := contributions[:topN]
 
-	// Build human-readable summary using labels instead of raw feature names
 	var topIncreasing []string
 	for _, f := range topFeatures {
 		if f.Direction == "increases_fraud" {

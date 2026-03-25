@@ -98,6 +98,10 @@ class PredictResponse(BaseModel):
         ...,
         description="MSE reconstruction error from autoencoder"
     )
+    inference_time_ms: Optional[float] = Field(
+        default=None,
+        description="Isolated PyTorch inference time in milliseconds (excludes HTTP, JSON, preprocessing)"
+    )
     shap_values: Optional[Dict[str, float]] = Field(
         default=None,
         description="SHAP values for each feature (only if explain=true)"
@@ -106,63 +110,14 @@ class PredictResponse(BaseModel):
         default=None,
         description="SHAP base value (expected prediction)"
     )
-    
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "fraud_probability": 0.0234,
-                    "reconstruction_error": 0.0012,
-                    "shap_values": None,
-                    "base_value": None
-                },
-                {
-                    "fraud_probability": 0.9456,
-                    "reconstruction_error": 15.234,
-                    "shap_values": {
-                        "V14": -2.341,
-                        "V12": -1.892,
-                        "V10": 1.234,
-                        "Reconstruction_Error": -0.987
-                    },
-                    "base_value": 0.00172
-                }
-            ]
-        }
-    }
 
 
 class HealthResponse(BaseModel):
     """Response body for /health endpoint."""
-    status: str = Field(
-        ...,
-        description="Service health status"
-    )
-    models_loaded: bool = Field(
-        ...,
-        description="Whether ML models are loaded and ready"
-    )
-    autoencoder_input_dim: Optional[int] = Field(
-        default=None,
-        description="Expected input dimension for autoencoder"
-    )
-    classifier_input_dim: Optional[int] = Field(
-        default=None,
-        description="Expected input dimension for classifier"
-    )
-    
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "status": "healthy",
-                    "models_loaded": True,
-                    "autoencoder_input_dim": 31,
-                    "classifier_input_dim": 32
-                }
-            ]
-        }
-    }
+    status: str = Field(..., description="Service health status")
+    models_loaded: bool = Field(..., description="Whether ML models are loaded and ready")
+    autoencoder_input_dim: Optional[int] = Field(default=None, description="Expected input dimension for autoencoder")
+    classifier_input_dim: Optional[int] = Field(default=None, description="Expected input dimension for classifier")
 
 
 class ErrorResponse(BaseModel):

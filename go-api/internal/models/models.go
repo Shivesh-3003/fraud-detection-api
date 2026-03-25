@@ -86,6 +86,7 @@ type PredictResponse struct {
 	Prediction       Prediction   `json:"prediction"`
 	Explanation      *Explanation `json:"explanation,omitempty"`
 	AlertSent        bool         `json:"alert_sent,omitempty"`
+	InferenceTimeMs  float64      `json:"inference_time_ms"`
 	ProcessingTimeMs float64      `json:"processing_time_ms"`
 	Timestamp        time.Time    `json:"timestamp"`
 }
@@ -144,6 +145,7 @@ type MLPredictRequest struct {
 type MLPredictResponse struct {
 	FraudProbability    float64            `json:"fraud_probability"`
 	ReconstructionError float64            `json:"reconstruction_error"`
+	InferenceTimeMs     float64            `json:"inference_time_ms"`
 	ShapValues          map[string]float64 `json:"shap_values,omitempty"`
 	BaseValue           float64            `json:"base_value,omitempty"`
 }

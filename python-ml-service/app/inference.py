@@ -14,6 +14,7 @@ FEATURE ORDER (Critical - must match training):
 
 import os
 import logging
+import time
 import numpy as np
 import torch
 import joblib
@@ -60,9 +61,8 @@ class FraudDetectionPipeline:
             models_dir: Directory containing model files
         """
         self.models_dir = Path(models_dir)
-        self.device = torch.device("cpu")  # Use CPU for consistent inference
+        self.device = torch.device("cpu")
         
-        # Will be populated by load_models()
         self.scaler = None
         self.autoencoder = None
         self.classifier = None
@@ -83,14 +83,11 @@ class FraudDetectionPipeline:
             FileNotFoundError: If any required file is missing
             RuntimeError: If model loading fails
         """
-        logger.info("Loading model artifacts...")
         
-        # Define expected file paths
         scaler_path = self.models_dir / "scaler.pkl"
         autoencoder_path = self.models_dir / "autoencoder_model.pth"
         classifier_path = self.models_dir / "mlp_classifier.pth"
         
-        # Check all files exist before loading
         missing_files = []
         for path in [scaler_path, autoencoder_path, classifier_path]:
             if not path.exists():
@@ -101,36 +98,32 @@ class FraudDetectionPipeline:
                 f"Missing required model files: {missing_files}"
             )
         
-        # Load scaler
         logger.info(f"  Loading scaler: {scaler_path}")
         self.scaler = joblib.load(scaler_path)
         logger.info(f"  ✓ Scaler loaded (expects {self.scaler.n_features_in_} features)")
         
-        # Validate scaler expects correct number of features
         if self.scaler.n_features_in_ != AUTOENCODER_INPUT_DIM:
             raise RuntimeError(
                 f"Scaler expects {self.scaler.n_features_in_} features, "
                 f"but pipeline expects {AUTOENCODER_INPUT_DIM}"
             )
         
-        # Load autoencoder
         logger.info(f"  Loading autoencoder: {autoencoder_path}")
         self.autoencoder = Autoencoder(input_dim=AUTOENCODER_INPUT_DIM)
         self.autoencoder.load_state_dict(
             torch.load(autoencoder_path, map_location=self.device)
         )
         self.autoencoder.to(self.device)
-        self.autoencoder.eval()  # Set to evaluation mode (disables dropout if any)
+        self.autoencoder.eval()
         logger.info("  ✓ Autoencoder loaded")
         
-        # Load classifier
         logger.info(f"  Loading classifier: {classifier_path}")
         self.classifier = FraudClassifier(input_dim=CLASSIFIER_INPUT_DIM)
         self.classifier.load_state_dict(
             torch.load(classifier_path, map_location=self.device)
         )
         self.classifier.to(self.device)
-        self.classifier.eval()  # Set to evaluation mode (disables dropout)
+        self.classifier.eval()
         logger.info("  ✓ Classifier loaded")
         
         self._models_loaded = True
@@ -140,7 +133,7 @@ class FraudDetectionPipeline:
         self,
         v_features: list[float],
         amount: float,
-        time: float
+        time_val: float
     ) -> np.ndarray:
         """
         Transform raw transaction data to model-ready features.
@@ -167,15 +160,12 @@ class FraudDetectionPipeline:
                 f"Expected 28 V-features, got {len(v_features)}"
             )
         
-        # Transform Amount
-        amount_log = np.log1p(amount)  # log1p handles amount=0 safely
+        amount_log = np.log1p(amount)
         
-        # Transform Time to cyclic features
-        hour = np.floor(time / 3600) % 24
+        hour = np.floor(time_val / 3600) % 24
         hour_sin = np.sin(2 * np.pi * hour / 24)
         hour_cos = np.cos(2 * np.pi * hour / 24)
         
-        # Combine in correct order: V1-V28, Amount_Log, Hour_sin, Hour_cos
         features = np.array(
             v_features + [amount_log, hour_sin, hour_cos],
             dtype=np.float32
@@ -203,63 +193,70 @@ class FraudDetectionPipeline:
         self,
         v_features: list[float],
         amount: float,
-        time: float
-    ) -> Tuple[float, float, np.ndarray]:
+        time_val: float
+    ) -> Tuple[float, float, np.ndarray, float]:
         """
         Run full prediction pipeline on a single transaction.
-        
         Args:
             v_features: List of 28 V-features [V1, V2, ..., V28]
             amount: Raw transaction amount
             time: Raw time in seconds
-            
+        
         Returns:
             Tuple of:
                 - fraud_probability (float): 0.0 to 1.0
                 - reconstruction_error (float): MSE from autoencoder
                 - classifier_input (np.ndarray): The 32 features fed to classifier
-                  (needed for SHAP explanations)
-                  
+                - inference_time_ms (float): Isolated PyTorch inference time
         Raises:
             RuntimeError: If models not loaded
         """
         if not self._models_loaded:
             raise RuntimeError("Models not loaded. Call load_models() first.")
         
-        # Step 1: Preprocess raw features
-        features_31 = self.preprocess(v_features, amount, time)
+        # Step 1: Preprocess raw features (not timed — this is data prep, not inference)
+        features_31 = self.preprocess(v_features, amount, time_val)
         
-        # Step 2: Scale features
+        # Step 2: Scale features (not timed — this is sklearn, not neural network)
         scaled_features = self.scale(features_31)
         
-        # Step 3: Get reconstruction error from autoencoder
+        # ISOLATED ML INFERENCE TIMING
+        # Only measures the actual PyTorch forward passes:
+        #   1. Autoencoder reconstruction error
+        #   2. MLP classifier probability
+        # Excludes: HTTP, JSON, preprocessing, scaling, numpy ops
+        inference_start = time.perf_counter()
+        
+        # Step 3: Autoencoder forward pass → reconstruction error
         with torch.no_grad():
             tensor_31 = torch.tensor(
                 scaled_features, dtype=torch.float32
-            ).unsqueeze(0).to(self.device)  # Shape: (1, 31)
+            ).unsqueeze(0).to(self.device)
             
             reconstruction_error = self.autoencoder.get_reconstruction_error(
                 tensor_31
             ).item()
         
-        # Step 4: Concatenate features for classifier
-        # Shape: (32,) = 31 scaled features + 1 reconstruction error
+        # Step 4: Concatenate for classifier input
         classifier_input = np.append(scaled_features, reconstruction_error)
         
-        # Step 5: Get fraud probability from classifier
+        # Step 5: Classifier forward pass → fraud probability
         with torch.no_grad():
             tensor_32 = torch.tensor(
                 classifier_input, dtype=torch.float32
-            ).unsqueeze(0).to(self.device)  # Shape: (1, 32)
+            ).unsqueeze(0).to(self.device)
             
             fraud_probability = self.classifier.predict_proba(tensor_32).item()
         
-        return fraud_probability, reconstruction_error, classifier_input
+        inference_end = time.perf_counter()
+        inference_time_ms = (inference_end - inference_start) * 1000
+        
+        return fraud_probability, reconstruction_error, classifier_input, inference_time_ms
     
     def predict_batch(
         self,
         transactions: list[dict]
-    ) -> list[Tuple[float, float]]:
+    ) -> list[Tuple[float, float, float]]:
         """
         Run prediction pipeline on multiple transactions.
         
@@ -271,13 +268,23 @@ class FraudDetectionPipeline:
         """
         results = []
         for txn in transactions:
-            prob, error, _ = self.predict(
+            prob, error, _, inference_ms = self.predict(
                 v_features=txn['v_features'],
                 amount=txn['amount'],
                 time=txn['time']
             )
-            results.append((prob, error))
+            results.append((prob, error, inference_ms))
         return results
+    
+    def get_classifier_input_for_shap(
+        self,
+        v_features: list[float],
+        amount: float,
+        time_val: float
+    ) -> np.ndarray:
+        """Get the 32-feature vector for SHAP explanations."""
+        _, _, classifier_input, _ = self.predict(v_features, amount, time_val)
+        return classifier_input
     
     def is_ready(self) -> bool:
         """Check if pipeline is ready for predictions."""

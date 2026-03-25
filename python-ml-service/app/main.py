@@ -46,18 +46,15 @@ async def lifespan(app: FastAPI):
     """
     global pipeline, explainer
     
-    # Startup
     logger.info("="*60)
     logger.info("STARTING FRAUD DETECTION ML SERVICE")
     logger.info("="*60)
     
     try:
-        # Load the inference pipeline (scaler + autoencoder + classifier)
         logger.info("[1/2] Loading inference pipeline...")
         pipeline = get_pipeline()
         logger.info("✓ Inference pipeline loaded")
         
-        # Initialize SHAP explainer
         logger.info("[2/2] Initializing SHAP explainer...")
         explainer = get_explainer(pipeline.classifier)
         logger.info("✓ SHAP explainer initialized")
@@ -75,7 +72,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Failed to load models: {e}")
         raise
     
-    yield  # Application runs here
+    yield 
     
     # Shutdown
     logger.info("Shutting down ML service...")
@@ -102,12 +99,7 @@ app.add_middleware(
 )
 
 
-@app.get(
-    "/health",
-    response_model=HealthResponse,
-    summary="Health Check",
-    description="Check if the ML service is healthy and models are loaded"
-)
+@app.get("/health", response_model=HealthResponse)
 async def health_check():
     """
     Health check endpoint for Docker and Go API.
@@ -130,18 +122,10 @@ async def health_check():
     )
 
 
-@app.post(
-    "/predict",
-    response_model=PredictResponse,
-    summary="Predict Fraud",
-    description="Run fraud detection on a single transaction"
-)
+@app.post("/predict", response_model=PredictResponse)
 async def predict(
     request: PredictRequest,
-    explain: bool = Query(
-        default=False,
-        description="If true, include SHAP explanation in response"
-    )
+    explain: bool = Query(default=False)
 ):
     """
     Main prediction endpoint.
@@ -162,8 +146,6 @@ async def predict(
         PredictResponse with fraud_probability, reconstruction_error,
         and optionally shap_values + base_value
     """
-    start_time = time.time()
-    
     # Validate pipeline is ready
     if pipeline is None or not pipeline.is_ready():
         raise HTTPException(
@@ -172,17 +154,18 @@ async def predict(
         )
     
     try:
-        # Run prediction pipeline
-        fraud_probability, reconstruction_error, classifier_input = pipeline.predict(
+        # Run prediction pipeline — returns isolated inference time
+        fraud_probability, reconstruction_error, classifier_input, inference_time_ms = pipeline.predict(
             v_features=request.features,
             amount=request.amount,
-            time=request.time
+            time_val=request.time
         )
         
         # Build response
         response = PredictResponse(
             fraud_probability=fraud_probability,
-            reconstruction_error=reconstruction_error
+            reconstruction_error=reconstruction_error,
+            inference_time_ms=round(inference_time_ms, 4)
         )
         
         # Add SHAP explanation if requested
@@ -190,20 +173,18 @@ async def predict(
             try:
                 shap_values, base_value = explainer.explain(
                     classifier_input=classifier_input,
-                    nsamples=100  # Balance between speed and accuracy
+                    nsamples=100 # Balance between speed and accuracy
                 )
                 response.shap_values = shap_values
                 response.base_value = base_value
             except Exception as e:
-                # Don't fail the whole request if SHAP fails
                 logger.warning(f"SHAP explanation failed: {e}")
         
-        elapsed_ms = (time.time() - start_time) * 1000
         logger.info(
-            f"Prediction complete: fraud_prob={fraud_probability:.4f}, "
+            f"Prediction: fraud_prob={fraud_probability:.4f}, "
             f"recon_error={reconstruction_error:.4f}, "
-            f"explain={explain}, "
-            f"time={elapsed_ms:.2f}ms"
+            f"inference={inference_time_ms:.3f}ms, "
+            f"explain={explain}"
         )
         
         return response
@@ -235,10 +216,4 @@ async def root():
 # For running with uvicorn directly (development)
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
