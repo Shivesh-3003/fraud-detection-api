@@ -13,6 +13,14 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 import warnings
 import os
+import pathlib
+
+PLOTS_DIR  = pathlib.Path("plots")
+DATA_DIR   = pathlib.Path("data")
+MODELS_DIR = pathlib.Path("models")
+PLOTS_DIR.mkdir(exist_ok=True)
+DATA_DIR.mkdir(exist_ok=True)
+MODELS_DIR.mkdir(exist_ok=True)
 
 warnings.filterwarnings('ignore')
 
@@ -30,7 +38,7 @@ print("="*80)
 # ============================================================================
 print("\n[SECTION 1] DATA LOADING")
 
-filename = 'creditcard.csv'
+filename = 'data/creditcard.csv'
 
 if not os.path.exists(filename):
     print(f"❌ ERROR: '{filename}' not found.")
@@ -66,7 +74,7 @@ sns.countplot(x='Class', data=df, palette=['#2ecc71', '#e74c3c'])
 plt.title('Class Distribution (The "Needle in a Haystack")', fontsize=14)
 plt.yscale('log') # Log scale is essential here to see the fraud bar
 plt.ylabel('Count (Log Scale)')
-plt.savefig('01_imbalance_check.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / '01_imbalance_check.png', dpi=300, bbox_inches='tight')
 plt.close()
 print("✓ Saved '01_imbalance_check.png'")
 
@@ -102,7 +110,7 @@ sns.histplot(df['Amount_Log'], bins=50, kde=True, color='blue')
 plt.title('Distribution of Log-Transformed Amount')
 plt.xlabel('Log(Amount)')
 plt.ylabel('Count')
-plt.savefig('02_log_amount_distribution.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / '02_log_amount_distribution.png', dpi=300, bbox_inches='tight')
 plt.close() # Close the figure to free memory
 print("  -> Saved '02_log_amount_distribution.png'")
 
@@ -113,7 +121,7 @@ plt.title('Cyclic Time Check (Should be a Circle)')
 plt.xlabel('Hour_sin')
 plt.ylabel('Hour_cos')
 plt.axis('equal') # Ensure the aspect ratio is square
-plt.savefig('03_cyclic_time_check.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / '03_cyclic_time_check.png', dpi=300, bbox_inches='tight')
 plt.close()
 print("  -> Saved '03_cyclic_time_check.png'")
 
@@ -125,7 +133,7 @@ corr_matrix = df.corr()
 # We rely on color intensity.
 sns.heatmap(corr_matrix, annot=False, cmap='coolwarm', linewidths=0.5)
 plt.title('Full Correlation Matrix (Checking PCA Orthogonality)', fontsize=16)
-plt.savefig('04_full_correlation_matrix.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / '04_full_correlation_matrix.png', dpi=300, bbox_inches='tight')
 plt.close()
 print("  -> Saved '04_full_correlation_matrix.png'")
 
@@ -141,7 +149,7 @@ plt.title('Feature Correlation with Fraud (Class)', fontsize=16)
 plt.ylabel('Correlation Coefficient')
 plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.tight_layout()
-plt.savefig('05_correlation_with_class.png', dpi=300)
+plt.savefig(PLOTS_DIR / '05_correlation_with_class.png', dpi=300)
 plt.close()
 print("  -> Saved '05_correlation_with_class.png'")
 
@@ -199,22 +207,22 @@ print("✓ Data Scaled (Mean=0, Var=1)")
 print("\n[SECTION 6] SAVING DATASETS")
 
 # 1. Save Scaler
-joblib.dump(scaler, 'scaler.pkl')
-print("✓ Saved scaler.pkl")
+joblib.dump(scaler, MODELS_DIR / 'scaler.pkl')
+print("✓ Saved models/scaler.pkl")
 
 # 2. Save Autoencoder Training Data (Normal Only)
-pd.DataFrame(X_train_normal_scaled, columns=X.columns).to_csv('X_train_AE.csv', index=False)
-print("✓ Saved X_train_AE.csv (Use this to train PyTorch Autoencoder)")
+pd.DataFrame(X_train_normal_scaled, columns=X.columns).to_csv(DATA_DIR / 'X_train_AE.csv', index=False)
+print("✓ Saved data/X_train_AE.csv")
 
 # 3. Save MLP Training Data (Mixed Data + Labels)
-pd.DataFrame(X_train_scaled, columns=X.columns).to_csv('X_train_MLP.csv', index=False)
-y_train.to_csv('y_train_MLP.csv', index=False)
-print("✓ Saved X_train_MLP.csv & y_train_MLP.csv (Use this for Classifier)")
+pd.DataFrame(X_train_scaled, columns=X.columns).to_csv(DATA_DIR / 'X_train_MLP.csv', index=False)
+y_train.to_csv(DATA_DIR / 'y_train_MLP.csv', index=False)
+print("✓ Saved data/X_train_MLP.csv & data/y_train_MLP.csv")
 
 # 4. Save Test Data
-pd.DataFrame(X_test_scaled, columns=X.columns).to_csv('X_test.csv', index=False)
-y_test.to_csv('y_test.csv', index=False)
-print("✓ Saved X_test.csv & y_test.csv")
+pd.DataFrame(X_test_scaled, columns=X.columns).to_csv(DATA_DIR / 'X_test.csv', index=False)
+y_test.to_csv(DATA_DIR / 'y_test.csv', index=False)
+print("✓ Saved data/X_test.csv & data/y_test.csv")
 
 print("\n" + "="*80)
 print("READY FOR PHASE 1: AUTOENCODER TRAINING")

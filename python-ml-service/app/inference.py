@@ -13,6 +13,7 @@ FEATURE ORDER (Critical - must match training):
 """
 
 import os
+import json
 import logging
 import time
 import numpy as np
@@ -66,6 +67,7 @@ class FraudDetectionPipeline:
         self.scaler = None
         self.autoencoder = None
         self.classifier = None
+        self.threshold = 0.5
         self._models_loaded = False
         
         logger.info(f"FraudDetectionPipeline initialized (models_dir: {models_dir})")
@@ -126,6 +128,15 @@ class FraudDetectionPipeline:
         self.classifier.eval()
         logger.info("  ✓ Classifier loaded")
         
+        threshold_path = self.models_dir / "optimal_threshold.json"
+        if threshold_path.exists():
+            with open(threshold_path) as f:
+                self.threshold = float(json.load(f)["optimal_threshold"])
+            logger.info(f"  ✓ Optimal threshold loaded: {self.threshold:.4f}")
+        else:
+            self.threshold = 0.5
+            logger.warning("  ⚠ optimal_threshold.json not found, defaulting to 0.5")
+
         self._models_loaded = True
         logger.info("All models loaded successfully!")
     
@@ -245,7 +256,7 @@ class FraudDetectionPipeline:
             tensor_32 = torch.tensor(
                 classifier_input, dtype=torch.float32
             ).unsqueeze(0).to(self.device)
-            
+
             fraud_probability = self.classifier.predict_proba(tensor_32).item()
         
         inference_end = time.perf_counter()

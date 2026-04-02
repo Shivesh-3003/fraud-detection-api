@@ -5,18 +5,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import pathlib
+
+PLOTS_DIR = pathlib.Path("plots")
+PLOTS_DIR.mkdir(exist_ok=True)
 
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-MODEL_PATH = 'autoencoder_model.pth'
+MODEL_PATH = 'models/autoencoder_model.pth'
 FILES = {
-    'train': 'X_train_MLP.csv', # The Mixed Training Set
-    'test': 'X_test.csv'        # The Test Set
+    'train': 'data/X_train_MLP.csv',
+    'test': 'data/X_test.csv'
 }
 OUTPUT_FILES = {
-    'train': 'X_train_final.csv',
-    'test': 'X_test_final.csv'
+    'train': 'data/X_train_final.csv',
+    'test': 'data/X_test_final.csv'
 }
 
 # Detect Device
@@ -28,7 +32,7 @@ else:
     DEVICE = torch.device("cpu")
 
 # ==============================================================================
-# RE-DEFINE MODEL ARCHITECTURE (Must match training script exactly)
+# DEFINE MODEL ARCHITECTURE
 # ==============================================================================
 class Autoencoder(nn.Module):
     def __init__(self, input_dim):
@@ -103,7 +107,7 @@ def generate_features():
     print(f"\n[STEP 3] Validating Feature Separation...")
     
     # We need labels to visualize if it worked. Load y_train_MLP
-    y_train = pd.read_csv('y_train_MLP.csv')
+    y_train = pd.read_csv('data/y_train_MLP.csv')
     df_train = pd.read_csv(OUTPUT_FILES['train'])
     df_train['Class'] = y_train['Class'] # Temporary join for plotting
 
@@ -119,7 +123,7 @@ def generate_features():
     plt.xlabel('Reconstruction Error (MSE)')
     plt.xlim(0, 5) # Zoom in to see the separation
     plt.legend()
-    plt.savefig('07_error_separation.png')
+    plt.savefig(PLOTS_DIR / '07_error_separation.png')
     print("✓ Saved Separation Plot: 07_error_separation.png")
     
     print("\n✅ PHASE 2 COMPLETE.")

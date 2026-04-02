@@ -1,0 +1,12 @@
+{
+  "tp": 81,
+  "fp": 15,
+  "tn": 56849,
+  "fn": 17,
+  "precision": 0.84375,
+  "recall": 0.826531,
+  "f1_score": 0.835052,
+  "roc_auc": 0.978306,
+  "pr_auc": 0.752066,
+  "optimal_threshold": 0.9879
+}

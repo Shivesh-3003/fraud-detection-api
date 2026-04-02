@@ -62,7 +62,7 @@ services:
       - MODEL_PATH=/app/models
       - PYTHONUNBUFFERED=1
     volumes:
-      # Mount your trained model files
+      # Mount the trained model files
       # Expected files: autoencoder_model.pth, mlp_classifier.pth, scaler.pkl
       - ./python-ml-service/models:/app/models:ro
     healthcheck:

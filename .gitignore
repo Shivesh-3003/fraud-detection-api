@@ -26,6 +26,11 @@ go-api/fraud-detection-api
 *.swp
 *.swo
 
+# ── Training data & model artifacts ───────────────────────────────────────────
+# Large files — not suitable for git (use Git LFS or external storage)
+training/data/
+training/models/
+
 # ── Docker ────────────────────────────────────────────────────────────────────
 # Model files are large binaries — keep them out of git if re-training locally
 # python-ml-service/models/*.pth
