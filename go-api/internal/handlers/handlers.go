@@ -232,6 +232,87 @@ func (h *Handler) BatchPredict(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) PredictSparkov(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	ctx := r.Context()
+
+	var req models.SparkovPredictRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request body", nil)
+		return
+	}
+	if req.TransactionID == "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Request validation failed",
+			[]models.ErrorDetail{{Field: "transaction_id", Issue: "required"}})
+		return
+	}
+
+	mlReq := &models.MLSparkovPredictRequest{
+		Amt:           req.Features.Amt,
+		TransDatetime: req.Features.TransDatetime,
+		Dob:           req.Features.Dob,
+		Gender:        req.Features.Gender,
+		CityPop:       req.Features.CityPop,
+		Lat:           req.Features.Lat,
+		Long:          req.Features.Long,
+		MerchLat:      req.Features.MerchLat,
+		MerchLong:     req.Features.MerchLong,
+		Category:      req.Features.Category,
+	}
+
+	// Step 1: Fast prediction WITHOUT SHAP
+	mlResp, err := h.mlClient.PredictSparkov(ctx, mlReq)
+	if err != nil {
+		log.Printf("ML service error: %v", err)
+		writeError(w, http.StatusServiceUnavailable, "ML_SERVICE_UNAVAILABLE", "ML service is unavailable", nil)
+		return
+	}
+
+	isFraud := mlResp.FraudProbability >= h.config.FraudThreshold
+
+	// Step 2: Only compute SHAP if fraud detected
+	if isFraud {
+		mlRespExplained, err := h.mlClient.PredictSparkovWithExplanation(ctx, mlReq)
+		if err != nil {
+			log.Printf("SHAP explanation failed, using prediction without explanation: %v", err)
+		} else {
+			mlResp = mlRespExplained
+		}
+	}
+
+	prediction := models.Prediction{
+		IsFraud:             isFraud,
+		FraudProbability:    mlResp.FraudProbability,
+		Confidence:          getConfidenceLevel(mlResp.FraudProbability),
+		ReconstructionError: mlResp.ReconstructionError,
+	}
+
+	resp := models.PredictResponse{
+		TransactionID:    req.TransactionID,
+		Prediction:       prediction,
+		InferenceTimeMs:  mlResp.InferenceTimeMs,
+		ProcessingTimeMs: float64(time.Since(start).Microseconds()) / 1000.0,
+		Timestamp:        time.Now().UTC(),
+	}
+
+	if isFraud {
+		// For Sparkov, feature names are already human-readable — getFeatureLabel
+		// falls through to returning the raw name, so no mapping changes needed.
+		explanation := buildExplanation(mlResp)
+		resp.Explanation = explanation
+		if h.alertService.IsConfigured() {
+			go func() {
+				if err := h.alertService.SendFraudAlert(ctx, req.TransactionID, prediction, explanation); err != nil {
+					log.Printf("Failed to send fraud alert: %v", err)
+				}
+			}()
+			resp.AlertSent = true
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) Explain(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req models.ExplainRequest

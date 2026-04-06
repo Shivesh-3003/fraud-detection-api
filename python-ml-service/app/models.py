@@ -4,17 +4,17 @@ Pydantic Models for Fraud Detection API
 These schemas define the request/response format for the Python ML service.
 They must be compatible with what the Go API sends/expects.
 
-Go API Contract:
-    Request:
-        - features: [float] (28 V-features as array)
-        - amount: float
-        - time: float
-        
-    Response:
-        - fraud_probability: float
-        - reconstruction_error: float
-        - shap_values: {feature_name: float} (optional)
-        - base_value: float (optional)
+Dataset-aware design:
+    PredictRequest holds optional fields for both ULB and Sparkov.
+    The /predict handler validates completeness based on the loaded dataset type
+    (read from pipeline.feature_config.dataset_type) and builds the raw_input
+    dict for the preprocessing pipeline.
+
+ULB contract (dataset_type="ulb"):
+    features: [float×28], amount: float, time: float
+
+Sparkov contract (dataset_type="sparkov"):
+    amt, trans_datetime, dob, gender, city_pop, lat, long, merch_lat, merch_long, category
 """
 
 from typing import Dict, List, Optional
@@ -23,43 +23,81 @@ from pydantic import BaseModel, Field, field_validator
 
 class PredictRequest(BaseModel):
     """
-    Request body for /predict endpoint.
-    
-    Matches the MLPredictRequest struct from Go:
-        type MLPredictRequest struct {
-            Features []float64 `json:"features"`
-            Amount   float64   `json:"amount"`
-            Time     float64   `json:"time"`
-        }
+    Unified request body for /predict endpoint.
+
+    Fields are optional to support both ULB and Sparkov datasets.
+    The active dataset type is determined by the loaded model's feature_config.json.
+    The handler validates that the required fields for the active dataset are present.
+
+    ULB fields (dataset_type="ulb"):
+        features: 28 PCA-anonymous V-features
+        amount:   raw transaction amount
+        time:     seconds since first transaction in dataset
+
+    Sparkov fields (dataset_type="sparkov"):
+        amt:            transaction amount
+        trans_datetime: ISO datetime string, e.g. "2019-06-15T14:30:00"
+        dob:            date of birth ISO string, e.g. "1985-03-12"
+        gender:         "M" or "F"
+        city_pop:       city population (integer)
+        lat, long:      cardholder location coordinates
+        merch_lat, merch_long: merchant location coordinates
+        category:       transaction category string, e.g. "shopping_net"
     """
-    features: List[float] = Field(
-        ...,
-        description="28 PCA features (V1-V28) as an ordered array",
-        min_length=28,
-        max_length=28
+
+    # ULB fields
+    features: Optional[List[float]] = Field(
+        default=None,
+        description="28 PCA features (V1-V28) as ordered array — ULB dataset only"
     )
-    amount: float = Field(
-        ...,
-        description="Transaction amount (raw, not log-transformed)",
-        ge=0
+    amount: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Transaction amount (raw) — ULB dataset only"
     )
-    time: float = Field(
-        ...,
-        description="Time in seconds since first transaction in dataset",
-        ge=0
+    time: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Seconds since first transaction in dataset — ULB dataset only"
     )
-    
-    @field_validator('features')
-    @classmethod
-    def validate_features_length(cls, v):
-        if len(v) != 28:
-            raise ValueError(f"Expected exactly 28 features, got {len(v)}")
-        return v
-    
+
+    # Sparkov fields
+    amt: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Transaction amount — Sparkov dataset only"
+    )
+    trans_datetime: Optional[str] = Field(
+        default=None,
+        description="Transaction datetime ISO string, e.g. '2019-06-15T14:30:00' — Sparkov only"
+    )
+    dob: Optional[str] = Field(
+        default=None,
+        description="Cardholder date of birth ISO string, e.g. '1985-03-12' — Sparkov only"
+    )
+    gender: Optional[str] = Field(
+        default=None,
+        description="Cardholder gender: 'M' or 'F' — Sparkov only"
+    )
+    city_pop: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="City population — Sparkov only"
+    )
+    lat: Optional[float] = Field(default=None, description="Cardholder latitude — Sparkov only")
+    long: Optional[float] = Field(default=None, description="Cardholder longitude — Sparkov only")
+    merch_lat: Optional[float] = Field(default=None, description="Merchant latitude — Sparkov only")
+    merch_long: Optional[float] = Field(default=None, description="Merchant longitude — Sparkov only")
+    category: Optional[str] = Field(
+        default=None,
+        description="Transaction category, e.g. 'shopping_net' — Sparkov only"
+    )
+
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
+                    "description": "ULB example",
                     "features": [
                         -1.359807, -0.072781, 2.536347, 1.378155, -0.338321,
                         0.462388, 0.239599, 0.098698, 0.363787, 0.090794,
@@ -70,6 +108,19 @@ class PredictRequest(BaseModel):
                     ],
                     "amount": 149.62,
                     "time": 0.0
+                },
+                {
+                    "description": "Sparkov example",
+                    "amt": 120.50,
+                    "trans_datetime": "2019-06-15T14:30:00",
+                    "dob": "1985-03-12",
+                    "gender": "F",
+                    "city_pop": 5000,
+                    "lat": 36.07,
+                    "long": -81.17,
+                    "merch_lat": 36.01,
+                    "merch_long": -82.04,
+                    "category": "shopping_net"
                 }
             ]
         }
@@ -79,7 +130,7 @@ class PredictRequest(BaseModel):
 class PredictResponse(BaseModel):
     """
     Response body for /predict endpoint.
-    
+
     Matches the MLPredictResponse struct from Go:
         type MLPredictResponse struct {
             FraudProbability    float64            `json:"fraud_probability"`
@@ -100,15 +151,17 @@ class PredictResponse(BaseModel):
     )
     inference_time_ms: Optional[float] = Field(
         default=None,
-        description="Isolated PyTorch inference time in milliseconds (excludes HTTP, JSON, preprocessing)"
+        description="Isolated PyTorch inference time in milliseconds"
     )
     shap_values: Optional[Dict[str, float]] = Field(
         default=None,
-        description="SHAP values for each feature (only if explain=true)"
+        description="SHAP values per feature (only if explain=true). "
+                    "Keys are human-readable feature names for Sparkov, "
+                    "V1-V28 style names for ULB."
     )
     base_value: Optional[float] = Field(
         default=None,
-        description="SHAP base value (expected prediction)"
+        description="SHAP base value (expected prediction on background data)"
     )
 
 
@@ -116,8 +169,8 @@ class HealthResponse(BaseModel):
     """Response body for /health endpoint."""
     status: str = Field(..., description="Service health status")
     models_loaded: bool = Field(..., description="Whether ML models are loaded and ready")
-    autoencoder_input_dim: Optional[int] = Field(default=None, description="Expected input dimension for autoencoder")
-    classifier_input_dim: Optional[int] = Field(default=None, description="Expected input dimension for classifier")
+    autoencoder_input_dim: Optional[int] = Field(default=None)
+    classifier_input_dim: Optional[int] = Field(default=None)
 
 
 class ErrorResponse(BaseModel):

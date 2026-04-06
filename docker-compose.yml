@@ -62,9 +62,16 @@ services:
       - MODEL_PATH=/app/models
       - PYTHONUNBUFFERED=1
     volumes:
-      # Mount the trained model files
-      # Expected files: autoencoder_model.pth, mlp_classifier.pth, scaler.pkl
-      - ./python-ml-service/models:/app/models:ro
+      # Mount the trained model files for the active dataset.
+      # Switch datasets by setting DATASET env var before running docker-compose:
+      #   DATASET=ulb     docker-compose up   (default — European credit card, anonymous V1-V28)
+      #   DATASET=sparkov docker-compose up   (Sparkov synthetic, named features for SHAP demo)
+      #
+      # Expected files in each subdirectory:
+      #   scaler.pkl, autoencoder_model.pth, mlp_classifier.pth,
+      #   optimal_threshold.json, feature_config.json
+      #   (+ onehot_encoder.pkl for sparkov)
+      - ./python-ml-service/models/${DATASET:-ulb}:/app/models:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s

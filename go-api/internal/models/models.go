@@ -142,6 +142,41 @@ type MLPredictRequest struct {
 	Time     float64   `json:"time"`
 }
 
+// SparkovTransactionFeatures holds the raw named fields from the Sparkov dataset.
+// Used for the /api/v1/predict/sparkov endpoint (explainability demo).
+type SparkovTransactionFeatures struct {
+	Amt           float64 `json:"amt"`
+	TransDatetime string  `json:"trans_datetime"`
+	Dob           string  `json:"dob"`
+	Gender        string  `json:"gender"`
+	CityPop       int     `json:"city_pop"`
+	Lat           float64 `json:"lat"`
+	Long          float64 `json:"long"`
+	MerchLat      float64 `json:"merch_lat"`
+	MerchLong     float64 `json:"merch_long"`
+	Category      string  `json:"category"`
+}
+
+type SparkovPredictRequest struct {
+	TransactionID string                     `json:"transaction_id"`
+	Features      SparkovTransactionFeatures `json:"features"`
+}
+
+// MLSparkovPredictRequest is what the Go API sends to the Python ML service
+// when operating in Sparkov (named-feature) mode.
+type MLSparkovPredictRequest struct {
+	Amt           float64 `json:"amt"`
+	TransDatetime string  `json:"trans_datetime"`
+	Dob           string  `json:"dob"`
+	Gender        string  `json:"gender"`
+	CityPop       int     `json:"city_pop"`
+	Lat           float64 `json:"lat"`
+	Long          float64 `json:"long"`
+	MerchLat      float64 `json:"merch_lat"`
+	MerchLong     float64 `json:"merch_long"`
+	Category      string  `json:"category"`
+}
+
 type MLPredictResponse struct {
 	FraudProbability    float64            `json:"fraud_probability"`
 	ReconstructionError float64            `json:"reconstruction_error"`

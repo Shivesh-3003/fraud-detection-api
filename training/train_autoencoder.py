@@ -1,3 +1,4 @@
+import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,10 +9,18 @@ import matplotlib.pyplot as plt
 import os
 import pathlib
 
+# ==============================================================================
+# ARGUMENT PARSING
+# ==============================================================================
+parser = argparse.ArgumentParser(description='Train Autoencoder for Fraud Detection')
+parser.add_argument('--dataset', choices=['ulb', 'sparkov'], default='ulb',
+                    help='Dataset to train on (must match preprocessing output)')
+args = parser.parse_args()
+
 PLOTS_DIR  = pathlib.Path("plots")
-MODELS_DIR = pathlib.Path("models")
+MODELS_DIR = pathlib.Path(f"models/{args.dataset}")
 PLOTS_DIR.mkdir(exist_ok=True)
-MODELS_DIR.mkdir(exist_ok=True)
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==============================================================================
 # CONFIGURATION
@@ -19,8 +28,8 @@ MODELS_DIR.mkdir(exist_ok=True)
 BATCH_SIZE = 256
 EPOCHS = 50
 LEARNING_RATE = 1e-3
-INPUT_FILE = 'data/X_train_AE.csv'
-MODEL_SAVE_PATH = 'models/autoencoder_model.pth'
+INPUT_FILE = f'data/{args.dataset}/X_train_AE.csv'
+MODEL_SAVE_PATH = str(MODELS_DIR / 'autoencoder_model.pth')
 VAL_SPLIT = 0.10  # 90/10 train/val split
 
 # Detect Device (Prioritize Apple Metal (MPS) > CUDA > CPU)
@@ -156,9 +165,10 @@ def train():
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(PLOTS_DIR / '06_ae_training_loss.png')
+    plot_name = f'{args.dataset}_ae_training_loss.png'
+    plt.savefig(PLOTS_DIR / plot_name)
     plt.close()
-    print("✓ Saved Training Plot: 06_ae_training_loss.png")
+    print(f"✓ Saved Training Plot: {plot_name}")
 
     print("\n✅ TRAINING COMPLETE.")
 

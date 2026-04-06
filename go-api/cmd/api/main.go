@@ -33,6 +33,7 @@ func main() {
 	mux.HandleFunc("POST /api/v1/predict", h.Predict)
 	mux.HandleFunc("POST /api/v1/batch", h.BatchPredict)
 	mux.HandleFunc("POST /api/v1/explain", h.Explain)
+	mux.HandleFunc("POST /api/v1/predict/sparkov", h.PredictSparkov)
 
 	// 5. Wrap with middleware (applied in reverse order)
 	var handler http.Handler = mux

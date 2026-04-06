@@ -38,6 +38,14 @@ func (c *MLClient) PredictWithExplanation(ctx context.Context, req *models.MLPre
 	return c.post(ctx, "/predict?explain=true", req)
 }
 
+func (c *MLClient) PredictSparkov(ctx context.Context, req *models.MLSparkovPredictRequest) (*models.MLPredictResponse, error) {
+	return c.post(ctx, "/predict", req)
+}
+
+func (c *MLClient) PredictSparkovWithExplanation(ctx context.Context, req *models.MLSparkovPredictRequest) (*models.MLPredictResponse, error) {
+	return c.post(ctx, "/predict?explain=true", req)
+}
+
 func (c *MLClient) HealthCheck(ctx context.Context) error {
 	url := c.baseURL + "/health"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

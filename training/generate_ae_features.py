@@ -1,3 +1,5 @@
+import argparse
+import json
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -7,21 +9,36 @@ import seaborn as sns
 import os
 import pathlib
 
+# ==============================================================================
+# ARGUMENT PARSING
+# ==============================================================================
+parser = argparse.ArgumentParser(description='Generate Autoencoder Reconstruction Error Features')
+parser.add_argument('--dataset', choices=['ulb', 'sparkov'], default='ulb',
+                    help='Dataset to process (must match preprocessing and autoencoder training)')
+args = parser.parse_args()
+
 PLOTS_DIR = pathlib.Path("plots")
 PLOTS_DIR.mkdir(exist_ok=True)
 
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-MODEL_PATH = 'models/autoencoder_model.pth'
+MODEL_PATH = f'models/{args.dataset}/autoencoder_model.pth'
 FILES = {
-    'train': 'data/X_train_MLP.csv',
-    'test': 'data/X_test.csv'
+    'train': f'data/{args.dataset}/X_train_MLP.csv',
+    'test':  f'data/{args.dataset}/X_test.csv'
 }
 OUTPUT_FILES = {
-    'train': 'data/X_train_final.csv',
-    'test': 'data/X_test_final.csv'
+    'train': f'data/{args.dataset}/X_train_final.csv',
+    'test':  f'data/{args.dataset}/X_test_final.csv'
 }
+
+# Load label column name from feature_config.json (Class for ULB, is_fraud for Sparkov)
+_config_path = f'models/{args.dataset}/feature_config.json'
+_LABEL_COL = 'Class'  # default (ULB)
+if os.path.exists(_config_path):
+    with open(_config_path) as _f:
+        _LABEL_COL = json.load(_f).get('label_column', 'Class')
 
 # Detect Device
 if torch.backends.mps.is_available():
@@ -107,24 +124,25 @@ def generate_features():
     print(f"\n[STEP 3] Validating Feature Separation...")
     
     # We need labels to visualize if it worked. Load y_train_MLP
-    y_train = pd.read_csv('data/y_train_MLP.csv')
+    y_train = pd.read_csv(f'data/{args.dataset}/y_train_MLP.csv')
     df_train = pd.read_csv(OUTPUT_FILES['train'])
-    df_train['Class'] = y_train['Class'] # Temporary join for plotting
+    df_train[_LABEL_COL] = y_train[_LABEL_COL]  # Temporary join for plotting
 
     plt.figure(figsize=(10, 6))
     
     # Plot Normal vs Fraud Reconstruction Errors
-    sns.kdeplot(data=df_train[df_train['Class']==0], x='Reconstruction_Error', 
+    sns.kdeplot(data=df_train[df_train[_LABEL_COL]==0], x='Reconstruction_Error',
                 fill=True, color='green', label='Normal (0)', alpha=0.3)
-    sns.kdeplot(data=df_train[df_train['Class']==1], x='Reconstruction_Error', 
+    sns.kdeplot(data=df_train[df_train[_LABEL_COL]==1], x='Reconstruction_Error',
                 fill=True, color='red', label='Fraud (1)', alpha=0.3)
     
     plt.title('Reconstruction Error Separation (The "Signal")')
     plt.xlabel('Reconstruction Error (MSE)')
     plt.xlim(0, 5) # Zoom in to see the separation
     plt.legend()
-    plt.savefig(PLOTS_DIR / '07_error_separation.png')
-    print("✓ Saved Separation Plot: 07_error_separation.png")
+    plot_name = f'{args.dataset}_error_separation.png'
+    plt.savefig(PLOTS_DIR / plot_name)
+    print(f"✓ Saved Separation Plot: {plot_name}")
     
     print("\n✅ PHASE 2 COMPLETE.")
     print("Next Step: Train the final MLP Classifier on 'X_train_final.csv'")

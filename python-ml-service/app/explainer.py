@@ -20,7 +20,7 @@ from typing import Dict, Optional, Tuple
 import shap
 
 from .ml_models import FraudClassifier
-from .inference import FEATURE_NAMES_32, CLASSIFIER_INPUT_DIM
+from .inference import FEATURE_NAMES_32, CLASSIFIER_INPUT_DIM  # kept for backward-compat imports
 
 logger = logging.getLogger(__name__)
 
@@ -36,21 +36,25 @@ class FraudExplainer:
     def __init__(
         self,
         classifier: FraudClassifier,
+        feature_names: Optional[list] = None,
         background_data: Optional[np.ndarray] = None,
         n_background_samples: int = 100
     ):
         """
         Initialize the explainer.
-        
+
         Args:
             classifier: Trained FraudClassifier model
-            background_data: Background samples for SHAP (shape: n_samples, 32)
+            feature_names: Ordered list of feature names for SHAP output keys.
+                           Should include 'Reconstruction_Error' as last element.
+                           Defaults to ULB FEATURE_NAMES_32 for backward compatibility.
+            background_data: Background samples for SHAP (shape: n_samples, clf_input_dim)
                              If None, uses zeros as background
             n_background_samples: Number of background samples to use
         """
         self.classifier = classifier
         self.classifier.eval()
-        self.feature_names = FEATURE_NAMES_32
+        self.feature_names = feature_names if feature_names is not None else FEATURE_NAMES_32
         
         # Create background data if not provided
         if background_data is None:
@@ -58,8 +62,9 @@ class FraudExplainer:
                 "No background data provided. Using zeros. "
                 "SHAP values may be less accurate."
             )
-            # Use zeros as a simple baseline
-            self.background = np.zeros((1, CLASSIFIER_INPUT_DIM), dtype=np.float32)
+            # Use zeros as a simple baseline; size derived from feature_names
+            clf_input_dim = len(self.feature_names)
+            self.background = np.zeros((1, clf_input_dim), dtype=np.float32)
         else:
             # Sample if we have too many
             if len(background_data) > n_background_samples:

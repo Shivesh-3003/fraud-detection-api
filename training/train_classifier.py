@@ -1,3 +1,4 @@
+import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,16 +19,25 @@ import json
 import pathlib
 
 # ==============================================================================
+# ARGUMENT PARSING
+# ==============================================================================
+parser = argparse.ArgumentParser(description='Train MLP Classifier for Fraud Detection')
+parser.add_argument('--dataset', choices=['ulb', 'sparkov'], default='ulb',
+                    help='Dataset to train on (must match prior preprocessing steps)')
+args = parser.parse_args()
+
+# ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-TRAIN_FEATURES      = 'data/X_train_final.csv'
-TRAIN_LABELS        = 'data/y_train_MLP.csv'
-TEST_FEATURES       = 'data/X_test_final.csv'
-TEST_LABELS         = 'data/y_test.csv'
-MODEL_SAVE_PATH     = 'models/mlp_classifier.pth'
-THRESHOLD_SAVE_PATH = 'models/optimal_threshold.json'
+TRAIN_FEATURES      = f'data/{args.dataset}/X_train_final.csv'
+TRAIN_LABELS        = f'data/{args.dataset}/y_train_MLP.csv'
+TEST_FEATURES       = f'data/{args.dataset}/X_test_final.csv'
+TEST_LABELS         = f'data/{args.dataset}/y_test.csv'
+MODEL_SAVE_PATH     = f'models/{args.dataset}/mlp_classifier.pth'
+THRESHOLD_SAVE_PATH = f'models/{args.dataset}/optimal_threshold.json'
 PLOTS_DIR           = pathlib.Path("plots")
 EVAL_DIR            = pathlib.Path("evaluation_plots")
+DATASET             = args.dataset  # used as prefix for output filenames
 
 BATCH_SIZE    = 256
 EPOCHS        = 30
@@ -375,8 +385,9 @@ def train_and_evaluate():
     pr_auc  = auc(pr_recalls, pr_precisions)
     roc_auc = roc_auc_score(y_test.flatten(), y_probs)
 
-    # 1. ulb_metrics.json
-    with open(EVAL_DIR / "ulb_metrics.json", "w") as f:
+    # 1. {dataset}_metrics.json
+    metrics_file = EVAL_DIR / f"{DATASET}_metrics.json"
+    with open(metrics_file, "w") as f:
         json.dump({
             "tp": metrics_optimal['tp'], "fp": metrics_optimal['fp'],
             "tn": metrics_optimal['tn'], "fn": metrics_optimal['fn'],
@@ -387,52 +398,52 @@ def train_and_evaluate():
             "pr_auc":            round(pr_auc,            6),
             "optimal_threshold": round(optimal_threshold, 4),
         }, f, indent=2)
-    print(f"✓ Saved: {EVAL_DIR / 'ulb_metrics.json'}")
+    print(f"✓ Saved: {metrics_file}")
 
-    # 2. ulb_pr_curve.png
+    # 2. {dataset}_pr_curve.png
     plt.figure(figsize=(8, 6))
     plt.plot(pr_recalls, pr_precisions, color='darkorange', lw=2,
              label=f'PR Curve (AUC = {pr_auc:.4f})')
     plt.xlabel('Recall'); plt.ylabel('Precision')
-    plt.title('Precision-Recall Curve (ULB Dataset)')
+    plt.title(f'Precision-Recall Curve ({DATASET.upper()} Dataset)')
     plt.legend(loc='upper right'); plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(EVAL_DIR / "ulb_pr_curve.png", dpi=150); plt.close()
-    print(f"✓ Saved: {EVAL_DIR / 'ulb_pr_curve.png'}")
+    plt.savefig(EVAL_DIR / f"{DATASET}_pr_curve.png", dpi=150); plt.close()
+    print(f"✓ Saved: {EVAL_DIR / f'{DATASET}_pr_curve.png'}")
 
-    # 3. ulb_f1_threshold_curve.png
+    # 3. {dataset}_f1_threshold_curve.png
     plt.figure(figsize=(8, 6))
     plt.plot(sweep_thresholds, sweep_f1_scores, color='steelblue', lw=2,
              marker='o', markersize=4, label='F1-Score')
     plt.axvline(x=optimal_threshold, color='red', linestyle='--', lw=1.5,
                 label=f'Optimal = {optimal_threshold:.4f}')
     plt.xlabel('Threshold'); plt.ylabel('F1-Score')
-    plt.title('Threshold vs F1-Score (ULB Dataset)')
+    plt.title(f'Threshold vs F1-Score ({DATASET.upper()} Dataset)')
     plt.legend(); plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(EVAL_DIR / "ulb_f1_threshold_curve.png", dpi=150); plt.close()
-    print(f"✓ Saved: {EVAL_DIR / 'ulb_f1_threshold_curve.png'}")
+    plt.savefig(EVAL_DIR / f"{DATASET}_f1_threshold_curve.png", dpi=150); plt.close()
+    print(f"✓ Saved: {EVAL_DIR / f'{DATASET}_f1_threshold_curve.png'}")
 
-    # 4. ulb_confusion_matrix.png
+    # 4. {dataset}_confusion_matrix.png
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm_optimal, annot=True, fmt='d', cmap='Greens', cbar=True,
                 xticklabels=['Normal', 'Fraud'], yticklabels=['Normal', 'Fraud'])
     plt.xlabel('Predicted'); plt.ylabel('Actual')
-    plt.title(f'Confusion Matrix — ULB Dataset (Threshold={optimal_threshold:.3f})')
+    plt.title(f'Confusion Matrix — {DATASET.upper()} Dataset (Threshold={optimal_threshold:.3f})')
     plt.tight_layout()
-    plt.savefig(EVAL_DIR / "ulb_confusion_matrix.png", dpi=150); plt.close()
-    print(f"✓ Saved: {EVAL_DIR / 'ulb_confusion_matrix.png'}")
+    plt.savefig(EVAL_DIR / f"{DATASET}_confusion_matrix.png", dpi=150); plt.close()
+    print(f"✓ Saved: {EVAL_DIR / f'{DATASET}_confusion_matrix.png'}")
 
-    # 5. ulb_loss_curve.png
+    # 5. {dataset}_loss_curve.png
     plt.figure(figsize=(9, 5))
     plt.plot(range(1, EPOCHS + 1), train_losses, label='Training Loss',   color='steelblue', lw=2)
     plt.plot(range(1, EPOCHS + 1), val_losses,   label='Validation Loss', color='tomato',    lw=2, linestyle='--')
     plt.xlabel('Epoch'); plt.ylabel('BCEWithLogitsLoss')
-    plt.title('MLP Classifier Loss Curve (ULB Dataset)')
+    plt.title(f'MLP Classifier Loss Curve ({DATASET.upper()} Dataset)')
     plt.legend(); plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(EVAL_DIR / "ulb_loss_curve.png", dpi=150); plt.close()
-    print(f"✓ Saved: {EVAL_DIR / 'ulb_loss_curve.png'}")
+    plt.savefig(EVAL_DIR / f"{DATASET}_loss_curve.png", dpi=150); plt.close()
+    print(f"✓ Saved: {EVAL_DIR / f'{DATASET}_loss_curve.png'}")
 
     # Save threshold for inference.py
     with open(THRESHOLD_SAVE_PATH, "w") as f:

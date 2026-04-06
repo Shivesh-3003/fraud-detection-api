@@ -23,7 +23,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import PredictRequest, PredictResponse, HealthResponse, ErrorResponse
-from .inference import get_pipeline, FraudDetectionPipeline, AUTOENCODER_INPUT_DIM, CLASSIFIER_INPUT_DIM
+from .inference import get_pipeline, FraudDetectionPipeline
 from .explainer import FraudExplainer
 
 # Configure logging
@@ -46,8 +46,10 @@ def _build_background_data(pipe: FraudDetectionPipeline, n_samples: int = 100) -
     """
     import torch
 
+    ae_dim = pipe.feature_config.ae_input_dim
+
     np.random.seed(42)
-    scaled_samples = np.random.randn(n_samples, AUTOENCODER_INPUT_DIM).astype(np.float32)
+    scaled_samples = np.random.randn(n_samples, ae_dim).astype(np.float32)
 
     pipe.autoencoder.eval()
     with torch.no_grad():
@@ -82,10 +84,14 @@ async def lifespan(app: FastAPI):
         background = _build_background_data(pipeline, n_samples=100)
         explainer = FraudExplainer(
             classifier=pipeline.classifier,
+            feature_names=pipeline.get_feature_names(include_reconstruction_error=True),
             background_data=background,
             n_background_samples=100
         )
-        logger.info("✓ SHAP explainer initialized with training-derived background data")
+        logger.info(
+            f"✓ SHAP explainer initialized (dataset: {pipeline.feature_config.dataset_type}, "
+            f"{len(pipeline.get_feature_names())} features)"
+        )
         
         logger.info("="*60)
         logger.info("ML SERVICE READY")
@@ -141,12 +147,12 @@ async def health_check():
             autoencoder_input_dim=None,
             classifier_input_dim=None
         )
-    
+
     return HealthResponse(
         status="healthy",
         models_loaded=True,
-        autoencoder_input_dim=AUTOENCODER_INPUT_DIM,
-        classifier_input_dim=CLASSIFIER_INPUT_DIM
+        autoencoder_input_dim=pipeline.feature_config.ae_input_dim,
+        classifier_input_dim=pipeline.feature_config.clf_input_dim
     )
 
 
@@ -182,11 +188,44 @@ async def predict(
         )
     
     try:
+        # Build raw_input dict for dataset-aware preprocessing
+        dataset_type = pipeline.feature_config.dataset_type
+        if dataset_type == "ulb":
+            if request.features is None or request.amount is None or request.time is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ULB dataset requires: features (28 floats), amount, time"
+                )
+            raw_input = {
+                "v_features": request.features,
+                "amount": request.amount,
+                "time": request.time
+            }
+        else:  # sparkov
+            required = ["amt", "trans_datetime", "dob", "gender", "city_pop",
+                        "lat", "long", "merch_lat", "merch_long", "category"]
+            missing = [f for f in required if getattr(request, f) is None]
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Sparkov dataset requires: {missing}"
+                )
+            raw_input = {
+                "amt":           request.amt,
+                "trans_datetime": request.trans_datetime,
+                "dob":           request.dob,
+                "gender":        request.gender,
+                "city_pop":      request.city_pop,
+                "lat":           request.lat,
+                "long":          request.long,
+                "merch_lat":     request.merch_lat,
+                "merch_long":    request.merch_long,
+                "category":      request.category
+            }
+
         # Run prediction pipeline — returns isolated inference time
         fraud_probability, reconstruction_error, classifier_input, inference_time_ms = pipeline.predict(
-            v_features=request.features,
-            amount=request.amount,
-            time_val=request.time
+            raw_input
         )
         
         # Build response
