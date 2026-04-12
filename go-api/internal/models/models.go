@@ -69,7 +69,6 @@ type Prediction struct {
 
 type FeatureContribution struct {
 	Feature      string  `json:"feature"`
-	Label        string  `json:"label"`
 	Contribution float64 `json:"contribution"`
 	Direction    string  `json:"direction"`
 }

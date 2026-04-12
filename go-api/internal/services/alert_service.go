@@ -174,12 +174,7 @@ func (s *AlertService) buildExplanationText(explanation *models.Explanation) str
 		if f.Direction == "decreases_fraud" {
 			direction = "↓"
 		}
-		// Use Label (human-readable) instead of raw Feature name
-		displayName := f.Label
-		if displayName == "" {
-			displayName = f.Feature
-		}
-		parts = append(parts, fmt.Sprintf("%s %s (%.3f)", direction, displayName, f.Contribution))
+		parts = append(parts, fmt.Sprintf("%s %s (%.3f)", direction, f.Feature, f.Contribution))
 	}
 	return strings.Join(parts, "\n")
 }

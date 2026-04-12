@@ -12,42 +12,6 @@ import (
 	"fraud-detection-api/internal/services"
 )
 
-// Feature interpretation mapping
-var featureLabels = map[string]string{
-	"V14":                  "Transaction velocity anomaly",
-	"V12":                  "Merchant category deviation",
-	"V10":                  "Spending pattern anomaly",
-	"V4":                   "Card verification score",
-	"V17":                  "Transaction frequency signal",
-	"V11":                  "Geographic consistency score",
-	"V3":                   "Purchase amount pattern",
-	"V7":                   "Transaction channel indicator",
-	"V16":                  "Account activity pattern",
-	"V1":                   "Transaction distance metric",
-	"V2":                   "Payment method indicator",
-	"V5":                   "Merchant risk profile",
-	"V6":                   "Transaction type indicator",
-	"V8":                   "Device fingerprint signal",
-	"V9":                   "Time-of-day risk pattern",
-	"V13":                  "Cardholder behaviour score",
-	"V15":                  "Session duration indicator",
-	"V18":                  "Cross-border transaction flag",
-	"V19":                  "IP geolocation signal",
-	"V20":                  "Account age indicator",
-	"V21":                  "Recurring payment pattern",
-	"V22":                  "Refund history signal",
-	"V23":                  "Authentication method score",
-	"V24":                  "Transaction sequence pattern",
-	"V25":                  "Merchant history indicator",
-	"V26":                  "Velocity check signal",
-	"V27":                  "Digital wallet indicator",
-	"V28":                  "Network risk score",
-	"Reconstruction_Error": "Overall anomaly score",
-	"Amount_Log":           "Transaction amount (log-scaled)",
-	"Hour_sin":             "Transaction timing (cyclic)",
-	"Hour_cos":             "Transaction timing (cyclic)",
-}
-
 type Handler struct {
 	config       *config.Config
 	mlClient     *services.MLClient
@@ -357,13 +321,6 @@ func getConfidenceLevel(probability float64) string {
 	return "low"
 }
 
-func getFeatureLabel(feature string) string {
-	if label, ok := featureLabels[feature]; ok {
-		return label
-	}
-	return feature
-}
-
 func buildExplanation(mlResp *models.MLPredictResponse) *models.Explanation {
 	if mlResp.ShapValues == nil {
 		return nil
@@ -376,7 +333,6 @@ func buildExplanation(mlResp *models.MLPredictResponse) *models.Explanation {
 		}
 		contributions = append(contributions, models.FeatureContribution{
 			Feature:      feature,
-			Label:        getFeatureLabel(feature),
 			Contribution: value,
 			Direction:    direction,
 		})
@@ -400,7 +356,7 @@ func buildExplanation(mlResp *models.MLPredictResponse) *models.Explanation {
 	var topIncreasing []string
 	for _, f := range topFeatures {
 		if f.Direction == "increases_fraud" {
-			topIncreasing = append(topIncreasing, f.Label)
+			topIncreasing = append(topIncreasing, f.Feature)
 			if len(topIncreasing) >= 2 {
 				break
 			}
