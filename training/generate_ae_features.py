@@ -90,7 +90,7 @@ def generate_features():
     
     model = Autoencoder(input_dim).to(DEVICE)
     model.load_state_dict(torch.load(MODEL_PATH))
-    model.eval() # Set to evaluation mode (crucial!)
+    model.eval() # Set to evaluation mode
     print("✓ Model loaded and frozen.")
 
     # 2. Process Files

@@ -168,6 +168,7 @@ def _run_ulb():
     print(f"  - Global Train Shape: {X_train.shape}")
     print(f"  - Global Test Shape:  {X_test.shape}")
 
+    # Extract Normal-Only Training Set for Autoencoder
     train_normal_indices = y_train[y_train == 0].index
     X_train_normal = X_train.loc[train_normal_indices]
 

@@ -260,8 +260,6 @@ func (h *Handler) PredictSparkov(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isFraud {
-		// For Sparkov, feature names are already human-readable — getFeatureLabel
-		// falls through to returning the raw name, so no mapping changes needed.
 		explanation := buildExplanation(mlResp)
 		resp.Explanation = explanation
 		if h.alertService.IsConfigured() {
