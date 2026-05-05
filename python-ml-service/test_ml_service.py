@@ -22,6 +22,9 @@ from app.inference import (
     CLASSIFIER_INPUT_DIM,
     FEATURE_NAMES_32,
 )
+
+# SHAP is an optional dev dependency; skip the SHAP test class if unavailable.
+shap = pytest.importorskip("shap", reason="shap not installed — skipping SHAP tests")
 from app.explainer import FraudExplainer
 
 
@@ -75,57 +78,61 @@ def mock_explainer(mock_pipeline):
 
 class TestPreprocessing:
 
+    @staticmethod
+    def _raw(v_features, amount, time):
+        return {"v_features": v_features, "amount": amount, "time": time}
+
     def test_output_shape(self, mock_pipeline, sample_transaction):
         """28 V-features + Amount_Log + Hour_sin + Hour_cos = 31."""
-        features = mock_pipeline.preprocess(
+        features = mock_pipeline.preprocess(self._raw(
             sample_transaction["v_features"],
             sample_transaction["amount"],
             sample_transaction["time"],
-        )
+        ))
         assert features.shape == (31,)
 
     def test_amount_log_transform(self, mock_pipeline):
         """Amount is stored as log1p(Amount) at index 28."""
-        features = mock_pipeline.preprocess([0.0] * 28, amount=100.0, time=0.0)
+        features = mock_pipeline.preprocess(self._raw([0.0] * 28, 100.0, 0.0))
         assert np.isclose(features[28], np.log1p(100.0))
 
     def test_cyclic_time_midnight(self, mock_pipeline):
         """At time=0 (midnight): sin=0, cos=1."""
-        features = mock_pipeline.preprocess([0.0] * 28, amount=1.0, time=0.0)
+        features = mock_pipeline.preprocess(self._raw([0.0] * 28, 1.0, 0.0))
         assert np.isclose(features[29], 0.0, atol=1e-6)
         assert np.isclose(features[30], 1.0, atol=1e-6)
 
     def test_wrong_feature_count_raises(self, mock_pipeline):
         with pytest.raises(ValueError):
-            mock_pipeline.preprocess([0.0] * 27, amount=1.0, time=0.0)
+            mock_pipeline.preprocess(self._raw([0.0] * 27, 1.0, 0.0))
 
     def test_cyclic_encoding_at_6am(self, mock_pipeline):
         """At 6AM: sin(π/2)=1, cos(π/2)=0."""
-        features = mock_pipeline.preprocess([0.0] * 28, amount=1.0, time=6 * 3600.0)
+        features = mock_pipeline.preprocess(self._raw([0.0] * 28, 1.0, 6 * 3600.0))
         assert np.isclose(features[29], 1.0, atol=1e-6)
         assert np.isclose(features[30], 0.0, atol=1e-6)
 
     def test_cyclic_encoding_at_noon(self, mock_pipeline):
         """At 12PM: sin(π)≈0, cos(π)=-1."""
-        features = mock_pipeline.preprocess([0.0] * 28, amount=1.0, time=12 * 3600.0)
+        features = mock_pipeline.preprocess(self._raw([0.0] * 28, 1.0, 12 * 3600.0))
         assert np.isclose(features[29], 0.0, atol=1e-6)
         assert np.isclose(features[30], -1.0, atol=1e-6)
 
     def test_cyclic_encoding_at_6pm(self, mock_pipeline):
         """At 6PM: sin(3π/2)=-1, cos(3π/2)≈0."""
-        features = mock_pipeline.preprocess([0.0] * 28, amount=1.0, time=18 * 3600.0)
+        features = mock_pipeline.preprocess(self._raw([0.0] * 28, 1.0, 18 * 3600.0))
         assert np.isclose(features[29], -1.0, atol=1e-6)
         assert np.isclose(features[30], 0.0, atol=1e-6)
 
     def test_hour_wraps_at_24(self, mock_pipeline):
         """time=0 and time=24h must produce identical cyclic features (hour % 24 = 0)."""
-        f0 = mock_pipeline.preprocess([0.0] * 28, amount=1.0, time=0.0)
-        f24 = mock_pipeline.preprocess([0.0] * 28, amount=1.0, time=24 * 3600.0)
+        f0 = mock_pipeline.preprocess(self._raw([0.0] * 28, 1.0, 0.0))
+        f24 = mock_pipeline.preprocess(self._raw([0.0] * 28, 1.0, 24 * 3600.0))
         assert np.allclose(f0[29:31], f24[29:31], atol=1e-6)
 
     def test_negative_amount_produces_negative_log(self, mock_pipeline):
         """Amounts in (-1, 0) produce a finite but negative Amount_Log."""
-        features = mock_pipeline.preprocess([0.0] * 28, amount=-0.5, time=0.0)
+        features = mock_pipeline.preprocess(self._raw([0.0] * 28, -0.5, 0.0))
         assert features[28] < 0
         assert np.isfinite(features[28])
 
@@ -176,29 +183,23 @@ class TestModels:
 class TestPipeline:
 
     def test_predict_returns_valid_probability(self, mock_pipeline, sample_transaction):
-        prob, _, _ = mock_pipeline.predict(
-            sample_transaction["v_features"],
-            sample_transaction["amount"],
-            sample_transaction["time"],
-        )
+        prob, _, _, _ = mock_pipeline.predict(sample_transaction)
         assert 0.0 <= prob <= 1.0
+
+    def test_predict_returns_inference_time(self, mock_pipeline, sample_transaction):
+        """predict() must return a non-negative inference_time_ms as the 4th value."""
+        _, _, _, inference_ms = mock_pipeline.predict(sample_transaction)
+        assert isinstance(inference_ms, float)
+        assert inference_ms >= 0.0
 
     def test_classifier_input_is_32_features(self, mock_pipeline, sample_transaction):
         """31 scaled features + reconstruction error = 32."""
-        _, _, clf_input = mock_pipeline.predict(
-            sample_transaction["v_features"],
-            sample_transaction["amount"],
-            sample_transaction["time"],
-        )
+        _, _, clf_input, _ = mock_pipeline.predict(sample_transaction)
         assert clf_input.shape == (32,)
 
     def test_recon_error_is_last_feature(self, mock_pipeline, sample_transaction):
         """The 32nd value fed to the classifier should be the reconstruction error."""
-        _, recon_error, clf_input = mock_pipeline.predict(
-            sample_transaction["v_features"],
-            sample_transaction["amount"],
-            sample_transaction["time"],
-        )
+        _, recon_error, clf_input, _ = mock_pipeline.predict(sample_transaction)
         assert np.isclose(clf_input[31], recon_error)
 
     def test_missing_models_raises(self, tmp_path):
@@ -208,26 +209,19 @@ class TestPipeline:
 
     def test_determinism(self, mock_pipeline, sample_transaction):
         """Same input must produce identical outputs on repeated calls."""
-        p1, e1, _ = mock_pipeline.predict(
-            sample_transaction["v_features"],
-            sample_transaction["amount"],
-            sample_transaction["time"],
-        )
-        p2, e2, _ = mock_pipeline.predict(
-            sample_transaction["v_features"],
-            sample_transaction["amount"],
-            sample_transaction["time"],
-        )
+        p1, e1, _, _ = mock_pipeline.predict(sample_transaction)
+        p2, e2, _, _ = mock_pipeline.predict(sample_transaction)
         assert p1 == p2
         assert e1 == e2
 
     def test_batch_prediction(self, mock_pipeline, sample_transaction):
-        """predict_batch returns one result per transaction with valid probability and error."""
+        """predict_batch returns (prob, error, inference_ms) per transaction."""
         results = mock_pipeline.predict_batch([sample_transaction, sample_transaction])
         assert len(results) == 2
-        for prob, error in results:
+        for prob, error, inference_ms in results:
             assert 0.0 <= prob <= 1.0
             assert error >= 0.0
+            assert inference_ms >= 0.0
 
     def test_is_ready_before_and_after_loading(self, tmp_path):
         """is_ready() must be False before load_models() and True after."""

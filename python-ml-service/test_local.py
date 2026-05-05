@@ -75,15 +75,16 @@ def test_pipeline():
     normal_time = 0.0
     
     try:
-        prob, recon_error, classifier_input = pipeline.predict(
-            v_features=normal_features,
-            amount=normal_amount,
-            time=normal_time
-        )
+        prob, recon_error, classifier_input, inference_ms = pipeline.predict({
+            "v_features": normal_features,
+            "amount": normal_amount,
+            "time": normal_time,
+        })
         print(f"    Fraud Probability:    {prob:.6f}")
         print(f"    Reconstruction Error: {recon_error:.6f}")
+        print(f"    Inference Time:       {inference_ms:.3f} ms")
         print(f"    Classifier Input Shape: {classifier_input.shape}")
-        
+
         if prob < 0.5:
             print("    ✓ Correctly classified as NORMAL (prob < 0.5)")
         else:
@@ -107,13 +108,14 @@ def test_pipeline():
     anomalous_time = 80000.0
     
     try:
-        prob, recon_error, _ = pipeline.predict(
-            v_features=anomalous_features,
-            amount=anomalous_amount,
-            time=anomalous_time
-        )
+        prob, recon_error, _, inference_ms = pipeline.predict({
+            "v_features": anomalous_features,
+            "amount": anomalous_amount,
+            "time": anomalous_time,
+        })
         print(f"    Fraud Probability:    {prob:.6f}")
         print(f"    Reconstruction Error: {recon_error:.6f}")
+        print(f"    Inference Time:       {inference_ms:.3f} ms")
         print(f"    Note: Higher recon_error indicates anomaly detected")
     except Exception as e:
         print(f"    ✗ Prediction failed: {e}")
@@ -127,11 +129,11 @@ def test_pipeline():
         explainer = get_explainer(pipeline.classifier)
         
         # Get classifier input for explanation
-        _, _, classifier_input = pipeline.predict(
-            v_features=anomalous_features,
-            amount=anomalous_amount,
-            time=anomalous_time
-        )
+        _, _, classifier_input, _ = pipeline.predict({
+            "v_features": anomalous_features,
+            "amount": anomalous_amount,
+            "time": anomalous_time,
+        })
         
         shap_values, base_value = explainer.explain(
             classifier_input=classifier_input,
@@ -140,14 +142,17 @@ def test_pipeline():
         
         print(f"    Base value: {base_value:.6f}")
         print(f"    Number of SHAP values: {len(shap_values)}")
-        
-        # Show top contributors
-        top_features = explainer.get_top_contributors(shap_values, top_n=5)
+
+        # Top-N ranking lives in the Go API now (handlers.buildExplanation),
+        # so reproduce it inline here for visibility.
+        top_features = sorted(
+            shap_values.items(), key=lambda kv: abs(kv[1]), reverse=True
+        )[:5]
         print("    Top contributing features:")
-        for f in top_features:
-            direction = "↑" if f["direction"] == "increases_fraud" else "↓"
-            print(f"      {direction} {f['feature']}: {f['contribution']:.4f}")
-        
+        for name, value in top_features:
+            arrow = "↑" if value > 0 else "↓"
+            print(f"      {arrow} {name}: {value:.4f}")
+
         print("    ✓ SHAP explanation generated")
     except Exception as e:
         print(f"    ✗ SHAP test failed: {e}")

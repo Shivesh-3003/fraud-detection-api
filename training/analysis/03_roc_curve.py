@@ -16,7 +16,6 @@ def main() -> None:
     auc = roc_auc_score(y_test, y_probs)
     print(f"AUC-ROC = {auc:.4f}")
 
-    # Mark the operating point at the saved optimal threshold (0.986)
     op_thr = 0.986
     idx = int(np.argmin(np.abs(thr - op_thr)))
     op_fpr, op_tpr = fpr[idx], tpr[idx]
@@ -39,7 +38,6 @@ def main() -> None:
     plt.close(fig)
     print(f"Saved: {out}")
 
-    # Inset zoom on the upper-left corner where the operating point sits
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     for ax, xlim, ylim, title in (
         (ax1, (0, 1), (0, 1.02), "Full ROC"),

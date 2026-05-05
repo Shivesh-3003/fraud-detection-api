@@ -1,9 +1,11 @@
 """Reconstruction-error density plot.
 
-Reuses X_train_final.csv (already contains Reconstruction_Error) joined to
-y_train_MLP.csv. Renders a smooth normal (green, ~284k samples) curve and a
-deliberately-jagged fraud (red, ~492 samples) curve to honour the actual
-sample-size asymmetry. X-axis is extended to 22 to cover the full fraud tail.
+Concatenates the train and test splits to use every available sample
+(some normals were withheld for AE training, so totals are ~239k normal /
+413 fraud rather than the raw 284k / 492). Normal curve uses Scott's
+bandwidth; fraud curve uses Silverman scaled to 0.15 so the limited
+sample count produces visible jaggedness. X-axis runs to 22 to cover the
+full fraud tail.
 """
 from __future__ import annotations
 
@@ -16,7 +18,6 @@ from _shared import DATA_DIR, OUT_DIR
 
 
 def main() -> None:
-    # Combine train + test so we use ALL ~284k normals and all ~492 frauds
     X_train = pd.read_csv(DATA_DIR / "X_train_final.csv")
     y_train = pd.read_csv(DATA_DIR / "y_train_MLP.csv").values.flatten()
     X_test = pd.read_csv(DATA_DIR / "X_test_final.csv")
@@ -33,15 +34,12 @@ def main() -> None:
     print(f"Normal: n={len(normal):,}  range=[{normal.min():.4f}, {normal.max():.2f}]")
     print(f"Fraud:  n={len(fraud):,}    range=[{fraud.min():.4f}, {fraud.max():.2f}]")
 
-    # X-axis grid
     x_grid = np.linspace(0, 22, 1000)
 
-    # Normal: smooth Gaussian KDE (Scott's bandwidth → very smooth at n=284k)
     kde_normal = gaussian_kde(normal, bw_method="scott")
     pdf_normal = kde_normal(x_grid)
 
-    # Fraud: deliberately under-smoothed using Silverman scaled down so the
-    # 492-sample sparsity shows up as the natural jaggedness it actually has.
+    # Under-smooth the fraud curve so its small sample size shows through.
     kde_fraud = gaussian_kde(fraud, bw_method=lambda k: 0.15 * k.silverman_factor())
     pdf_fraud = kde_fraud(x_grid)
 

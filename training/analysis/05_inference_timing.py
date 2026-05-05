@@ -68,7 +68,6 @@ def main(n_samples: int = 5000, warmup: int = 100) -> None:
         v_features = [float(r[f"V{i}"]) for i in range(1, 29)]
         rows.append((v_features, float(r["Amount"]), float(r["Time"])))
 
-    # Warm-up (JIT / cache effects)
     print(f"Warming up ({warmup} iterations)...")
     for v, a, t in rows[:warmup]:
         feats = preprocess_ulb(v, a, t)
@@ -80,7 +79,6 @@ def main(n_samples: int = 5000, warmup: int = 100) -> None:
             clf_in = torch.tensor(np.append(scaled, err), dtype=torch.float32).unsqueeze(0)
             _ = torch.sigmoid(clf(clf_in)).item()
 
-    # Timed run
     print(f"Timing {n_samples} transactions...")
     t_pre = np.zeros(n_samples)
     t_scale = np.zeros(n_samples)
@@ -92,17 +90,15 @@ def main(n_samples: int = 5000, warmup: int = 100) -> None:
     for i, (v, a, t) in enumerate(rows[warmup:warmup + n_samples]):
         s_total = time.perf_counter()
 
-        # Preprocess
         s = time.perf_counter()
         feats = preprocess_ulb(v, a, t)
         t_pre[i] = (time.perf_counter() - s) * 1000
 
-        # Scale
         s = time.perf_counter()
         scaled = scaler.transform(feats.reshape(1, -1)).flatten()
         t_scale[i] = (time.perf_counter() - s) * 1000
 
-        # AE + Classifier (this is what `inference_time_ms` measures in production)
+        # AE + classifier matches what inference_time_ms reports in production.
         s_inf = time.perf_counter()
 
         s = time.perf_counter()
@@ -157,7 +153,6 @@ def main(n_samples: int = 5000, warmup: int = 100) -> None:
     print(f"\nSaved: {out_csv}")
     print(f"Saved: {out_json}")
 
-    # ---- Plot histograms ----
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))

@@ -68,8 +68,7 @@ def main() -> None:
     X_train_full, y_train = load_train_set()
     X_test_full, y_test = load_test_set()
 
-    # Baselines get the 31 raw engineered features only — drop Reconstruction_Error
-    # (the AE-derived feature). It's the LAST column in X_*_final.csv.
+    # Drop the trailing Reconstruction_Error column for the baselines.
     X_train_raw = X_train_full[:, :-1]
     X_test_raw = X_test_full[:, :-1]
     assert X_train_raw.shape[1] == 31, f"Expected 31 raw features, got {X_train_raw.shape[1]}"
@@ -86,7 +85,6 @@ def main() -> None:
     results: list[dict] = []
     proba_curves: dict[str, np.ndarray] = {}
 
-    # ---------------- Logistic Regression (raw 31 features) ----------------
     print("\n[1/4] Logistic Regression (isolated, no AE)...")
     t0 = time.time()
     lr = LogisticRegression(
@@ -98,7 +96,6 @@ def main() -> None:
     results.append(evaluate("Logistic Regression", y_test, lr_probs, lr_train))
     proba_curves["Logistic Regression"] = lr_probs
 
-    # ---------------- Random Forest (raw 31 features) ----------------
     print("[2/4] Random Forest (isolated, no AE)...")
     t0 = time.time()
     rf = RandomForestClassifier(
@@ -111,7 +108,6 @@ def main() -> None:
     results.append(evaluate("Random Forest", y_test, rf_probs, rf_train))
     proba_curves["Random Forest"] = rf_probs
 
-    # ---------------- XGBoost (raw 31 features) ----------------
     print("[3/4] XGBoost (isolated, no AE)...")
     t0 = time.time()
     xgb = XGBClassifier(
@@ -125,13 +121,11 @@ def main() -> None:
     results.append(evaluate("XGBoost", y_test, xgb_probs, xgb_train))
     proba_curves["XGBoost"] = xgb_probs
 
-    # ---------------- AE+MLP (full pipeline, 32-dim) ----------------
     print("[4/4] AE+MLP (full pipeline, loading pre-trained)...")
     mlp_probs = predict_proba_mlp(X_test_full)
     results.append(evaluate("AE+MLP (ours)", y_test, mlp_probs, train_seconds=float("nan")))
     proba_curves["AE+MLP (ours)"] = mlp_probs
 
-    # ---------------- Report ----------------
     df = pd.DataFrame(results)
     cols = ["model", "precision", "recall", "f1_score", "pr_auc", "roc_auc",
             "optimal_threshold", "tp", "fp", "fn", "tn", "train_seconds"]
@@ -149,7 +143,6 @@ def main() -> None:
     print(f"\nSaved: {out_csv}")
     print(f"Saved: {out_json}")
 
-    # ---------------- Bar chart for the report ----------------
     fig, ax = plt.subplots(figsize=(11, 6))
     metrics = ["precision", "recall", "f1_score", "pr_auc", "roc_auc"]
     x = np.arange(len(df))
@@ -171,14 +164,11 @@ def main() -> None:
     plt.close(fig)
     print(f"Saved: {out_plot}")
 
-    # ---------------- Combined PR / ROC curves ----------------
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    from sklearn.metrics import roc_curve
     for name, probs in proba_curves.items():
-        # PR
         p, r, _ = precision_recall_curve(y_test, probs)
         ax1.plot(r, p, lw=2, label=f"{name} (AUC={auc(r, p):.3f})")
-        # ROC
-        from sklearn.metrics import roc_curve
         fpr, tpr, _ = roc_curve(y_test, probs)
         ax2.plot(fpr, tpr, lw=2, label=f"{name} (AUC={roc_auc_score(y_test, probs):.3f})")
 

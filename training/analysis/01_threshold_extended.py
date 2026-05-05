@@ -19,7 +19,6 @@ def main() -> None:
 
     y_probs = predict_proba_mlp(X_test)
 
-    # Coarse grid 0.0–0.9 (step 0.02), fine grid 0.9–1.0 (step 0.002)
     coarse = np.arange(0.00, 0.90, 0.02)
     fine = np.arange(0.90, 1.000, 0.002)
     thresholds = np.unique(np.concatenate([coarse, fine, [0.5]]))
@@ -37,7 +36,6 @@ def main() -> None:
     optimal_f1 = float(f1s[optimal_idx])
     print(f"Optimal threshold: {optimal_t:.4f}  F1={optimal_f1:.4f}")
 
-    # ---- Full-range plot (continues past optimum) ----
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(thresholds, f1s, color="steelblue", lw=2, label="F1-Score")
     ax.plot(thresholds, precs, color="seagreen", lw=1.3, ls="--", alpha=0.7, label="Precision")
@@ -45,7 +43,6 @@ def main() -> None:
     ax.axvline(optimal_t, color="red", ls=":", lw=1.5,
                label=f"Optimal = {optimal_t:.4f} (F1={optimal_f1:.3f})")
     ax.scatter([optimal_t], [optimal_f1], color="red", s=60, zorder=5)
-    # Annotate the post-optimum region so the report can refer to it
     ax.axvspan(optimal_t, 1.0, color="red", alpha=0.05,
                label="Post-optimum region")
     ax.set_xlim(0, 1)
@@ -61,7 +58,6 @@ def main() -> None:
     plt.close(fig)
     print(f"Saved: {out1}")
 
-    # ---- Zoomed plot focused on 0.9–1.0 (fine granularity) ----
     mask = thresholds >= 0.85
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(thresholds[mask], f1s[mask], color="steelblue", lw=2, marker="o",

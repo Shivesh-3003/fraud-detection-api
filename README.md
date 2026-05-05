@@ -118,7 +118,14 @@ fraud-detection-api/
 │   ├── credit_card_eda_preprocessing.py  # Step 1: Data prep
 │   ├── train_autoencoder.py    # Step 2: Train autoencoder
 │   ├── generate_ae_features.py # Step 3: Generate error features
-│   └── train_classifier.py     # Step 4: Train classifier
+│   ├── train_classifier.py     # Step 4: Train classifier
+│   └── analysis/               # Post-training evaluation scripts
+│       ├── 01_threshold_extended.py    # F1/Precision/Recall vs threshold
+│       ├── 02_density_separation.py    # AE error density (normal vs fraud)
+│       ├── 03_roc_curve.py             # ROC curve + zoom
+│       ├── 04_benchmarks.py            # LR / RF / XGBoost vs AE+MLP
+│       ├── 05_inference_timing.py      # Per-stage latency benchmark
+│       └── outputs/                    # Generated PNG / CSV / JSON
 │
 ├── go-api/                     # Go API Orchestrator
 │   ├── Dockerfile
@@ -274,8 +281,32 @@ docker-compose ps
 
 ## Performance
 
-| Metric | Target | Notes |
-|--------|--------|-------|
-| Single prediction | < 5ms | Without SHAP |
-| With SHAP explanation | < 500ms | Depends on background samples |
-| Batch (100 txns) | < 200ms | Sequential processing |
+Per-transaction latency, measured locally (Apple Silicon, CPU-only PyTorch,
+n=5,000, 100-iter warm-up — see `training/analysis/05_inference_timing.py`):
+
+| Stage | Mean | p95 | p99 |
+|---|---|---|---|
+| Preprocess | 0.002 ms | 0.002 ms | 0.010 ms |
+| Scale | 0.023 ms | 0.028 ms | 0.035 ms |
+| Autoencoder forward | 0.044 ms | 0.051 ms | 0.059 ms |
+| Classifier forward | 0.021 ms | 0.025 ms | 0.029 ms |
+| **ML inference (AE + MLP)** | **0.065 ms** | 0.076 ms | 0.086 ms |
+| **End-to-end (single txn)** | **0.090 ms** | 0.105 ms | 0.118 ms |
+
+SHAP explanation adds ~hundreds of ms (depends on `nsamples`); the Go API
+only invokes it when the fast path flags fraud.
+
+### Model performance vs. baselines
+
+Isolated baselines on the same 31 raw engineered features (V1–V28,
+Amount_Log, Hour_sin, Hour_cos); AE+MLP uses its full 32-dim pipeline.
+Threshold for each model picked by max-F1 on the test PR curve.
+
+| Model | Precision | Recall | F1 | PR-AUC | ROC-AUC |
+|---|---|---|---|---|---|
+| Logistic Regression | 0.8387 | 0.7959 | 0.8168 | 0.7460 | 0.9723 |
+| Random Forest | 0.9318 | 0.8367 | 0.8817 | 0.8604 | 0.9523 |
+| XGBoost | 0.9756 | 0.8163 | 0.8889 | **0.8777** | 0.9727 |
+| **AE+MLP (ours)** | 0.8438 | **0.8265** | 0.8351 | 0.7521 | **0.9783** |
+
+Reproduce with `python3 training/analysis/04_benchmarks.py`.

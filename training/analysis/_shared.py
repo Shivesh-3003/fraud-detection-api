@@ -1,11 +1,7 @@
 """Shared loaders for the analysis scripts.
 
-Reuses already-trained ULB artifacts:
-  - data/X_test_final.csv  (32 features incl. Reconstruction_Error)
-  - data/y_test.csv
-  - models/mlp_classifier.pth
-  - models/autoencoder_model.pth
-  - models/scaler.pkl
+Loads the trained ULB artifacts from training/data/ and training/models/
+so each script can run independently without re-training.
 """
 from __future__ import annotations
 
@@ -30,7 +26,8 @@ def device() -> torch.device:
     return torch.device("cpu")
 
 
-# Architectures must match the originals exactly so state_dicts load.
+# Architectures duplicated from the training scripts so state_dicts load
+# without importing the training modules (which run argparse on import).
 class Autoencoder(nn.Module):
     def __init__(self, input_dim: int):
         super().__init__()
