@@ -60,7 +60,8 @@ models/
     ├── onehot_encoder.pkl
     ├── autoencoder_model.pth
     ├── mlp_classifier.pth
-    └── feature_config.json
+    ├── feature_config.json
+    └── optimal_threshold.json
 ```
 
 | File | Description |
@@ -70,7 +71,7 @@ models/
 | `autoencoder_model.pth` | Trained Autoencoder weights |
 | `mlp_classifier.pth` | Trained MLP Classifier weights |
 | `feature_config.json` | Feature names, dims, and dataset metadata |
-| `optimal_threshold.json` | F1-optimal classification threshold (ulb only) |
+| `optimal_threshold.json` | F1-optimal classification threshold |
 
 These files are produced by the training pipeline (`../training/`) and are not
 in git. See `models/README.md` for details on generating and staging them.

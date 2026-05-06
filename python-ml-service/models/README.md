@@ -19,7 +19,8 @@ models/
     ├── onehot_encoder.pkl
     ├── autoencoder_model.pth
     ├── mlp_classifier.pth
-    └── feature_config.json
+    ├── feature_config.json
+    └── optimal_threshold.json
 ```
 
 These files are produced by the training pipeline and are **not committed to
@@ -65,7 +66,7 @@ uvicorn app.main:app --port 8000
 | `autoencoder_model.pth` | Autoencoder weights (state dict) | `train_autoencoder.py` |
 | `mlp_classifier.pth` | MLP classifier weights (state dict) | `train_classifier.py` |
 | `feature_config.json` | Feature names, dimensions, and dataset metadata | `credit_card_eda_preprocessing.py` |
-| `optimal_threshold.json` | F1-optimal classification threshold (ulb only) | `train_classifier.py` |
+| `optimal_threshold.json` | F1-optimal classification threshold | `train_classifier.py` |
 
 ## Verification
 

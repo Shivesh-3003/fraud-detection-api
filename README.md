@@ -62,8 +62,8 @@ you want to **retrain** the models (see the optional section below).
 ### Step 1. Clone the repository
 
 ```bash
-git clone https://github.com/Shivesh-3003/fraud-detection-api.git
-cd fraud-detection-api
+git clone https://github.com/Shivesh-3003/fraud-detection-system.git
+cd fraud-detection-system
 ```
 
 The trained model artefacts for both datasets (ULB and Sparkov) are committed
@@ -190,7 +190,7 @@ curl -X POST http://localhost:8000/predict?explain=true \
 ## Project Structure
 
 ```
-fraud-detection-api/
+fraud-detection-system/
 ├── docker-compose.yml          # Orchestrates both services
 ├── test_system.py              # End-to-end test script
 │
@@ -242,7 +242,8 @@ fraud-detection-api/
             ├── mlp_classifier.pth
             ├── scaler.pkl
             ├── onehot_encoder.pkl
-            └── feature_config.json
+            ├── feature_config.json
+            └── optimal_threshold.json
 ```
 
 ## Training the Models
