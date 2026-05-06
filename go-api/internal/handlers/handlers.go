@@ -70,7 +70,7 @@ func (h *Handler) Predict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isFraud := mlResp.FraudProbability >= h.config.FraudThreshold
+	isFraud := mlResp.IsFraud
 
 	// Step 2: Only compute SHAP if fraud detected
 	if isFraud {
@@ -147,7 +147,7 @@ func (h *Handler) BatchPredict(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		isFraud := mlResp.FraudProbability >= h.config.FraudThreshold
+		isFraud := mlResp.IsFraud
 
 		if isFraud {
 			mlRespExplained, err := h.mlClient.PredictWithExplanation(ctx, mlReq)
@@ -232,7 +232,7 @@ func (h *Handler) PredictSparkov(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isFraud := mlResp.FraudProbability >= h.config.FraudThreshold
+	isFraud := mlResp.IsFraud
 
 	// Step 2: Only compute SHAP if fraud detected
 	if isFraud {

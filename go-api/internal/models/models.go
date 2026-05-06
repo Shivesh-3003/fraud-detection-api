@@ -177,6 +177,7 @@ type MLSparkovPredictRequest struct {
 }
 
 type MLPredictResponse struct {
+	IsFraud             bool               `json:"is_fraud"`
 	FraudProbability    float64            `json:"fraud_probability"`
 	ReconstructionError float64            `json:"reconstruction_error"`
 	InferenceTimeMs     float64            `json:"inference_time_ms"`

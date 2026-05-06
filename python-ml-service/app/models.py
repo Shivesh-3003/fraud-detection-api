@@ -133,12 +133,17 @@ class PredictResponse(BaseModel):
 
     Matches the MLPredictResponse struct from Go:
         type MLPredictResponse struct {
+            IsFraud             bool               `json:"is_fraud"`
             FraudProbability    float64            `json:"fraud_probability"`
             ReconstructionError float64            `json:"reconstruction_error"`
             ShapValues          map[string]float64 `json:"shap_values,omitempty"`
             BaseValue           float64            `json:"base_value,omitempty"`
         }
     """
+    is_fraud: bool = Field(
+        ...,
+        description="True if fraud_probability >= the model's trained optimal threshold"
+    )
     fraud_probability: float = Field(
         ...,
         description="Probability of fraud (0.0 to 1.0)",

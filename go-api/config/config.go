@@ -18,7 +18,6 @@ type Config struct {
 	SMTPUsername     string
 	SMTPPassword     string
 	AlertOnFraud     bool
-	FraudThreshold   float64
 }
 
 func Load() *Config {
@@ -34,7 +33,6 @@ func Load() *Config {
 		SMTPUsername:     getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:     getEnv("SMTP_PASSWORD", ""),
 		AlertOnFraud:     getBoolEnv("ALERT_ON_FRAUD", true),
-		FraudThreshold:   getFloatEnv("FRAUD_THRESHOLD", 0.5),
 	}
 }
 
@@ -54,15 +52,6 @@ func getEnv(key, defaultValue string) string {
 func getBoolEnv(key string, defaultValue bool) bool {
 	if value, exists := os.LookupEnv(key); exists {
 		if parsed, err := strconv.ParseBool(value); err == nil {
-			return parsed
-		}
-	}
-	return defaultValue
-}
-
-func getFloatEnv(key string, defaultValue float64) float64 {
-	if value, exists := os.LookupEnv(key); exists {
-		if parsed, err := strconv.ParseFloat(value, 64); err == nil {
 			return parsed
 		}
 	}

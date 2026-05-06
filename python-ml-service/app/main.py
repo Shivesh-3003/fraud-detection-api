@@ -227,9 +227,11 @@ async def predict(
         fraud_probability, reconstruction_error, classifier_input, inference_time_ms = pipeline.predict(
             raw_input
         )
-        
-        # Build response
+
+        # Build response — apply the trained per-dataset threshold here so the
+        # Go API consumes a single authoritative is_fraud boolean.
         response = PredictResponse(
+            is_fraud=fraud_probability >= pipeline.threshold,
             fraud_probability=fraud_probability,
             reconstruction_error=reconstruction_error,
             inference_time_ms=round(inference_time_ms, 4)

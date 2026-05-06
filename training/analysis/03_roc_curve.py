@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, roc_auc_score
 
-from _shared import load_test_set, predict_proba_mlp, OUT_DIR
+from _shared import load_test_set, predict_proba_mlp, load_optimal_threshold, OUT_DIR
 
 
 def main() -> None:
@@ -16,7 +16,7 @@ def main() -> None:
     auc = roc_auc_score(y_test, y_probs)
     print(f"AUC-ROC = {auc:.4f}")
 
-    op_thr = 0.986
+    op_thr = load_optimal_threshold("ulb")
     idx = int(np.argmin(np.abs(thr - op_thr)))
     op_fpr, op_tpr = fpr[idx], tpr[idx]
 
@@ -24,7 +24,7 @@ def main() -> None:
     ax.plot(fpr, tpr, color="darkorange", lw=2.5, label=f"AE+MLP (AUC = {auc:.4f})")
     ax.plot([0, 1], [0, 1], color="grey", lw=1, ls="--", label="Random (AUC = 0.5)")
     ax.scatter([op_fpr], [op_tpr], color="red", s=80, zorder=5,
-               label=f"Operating point (thr={op_thr})\nTPR={op_tpr:.3f}, FPR={op_fpr:.4f}")
+               label=f"Operating point (thr={op_thr:.4f})\nTPR={op_tpr:.3f}, FPR={op_fpr:.4f}")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1.02)
     ax.set_xlabel("False Positive Rate")
@@ -46,7 +46,7 @@ def main() -> None:
         ax.plot(fpr, tpr, color="darkorange", lw=2.5, label=f"AUC = {auc:.4f}")
         ax.plot([0, 1], [0, 1], color="grey", lw=1, ls="--")
         ax.scatter([op_fpr], [op_tpr], color="red", s=70, zorder=5,
-                   label=f"Op. pt (thr=0.986)")
+                   label=f"Op. pt (thr={op_thr:.4f})")
         ax.set_xlim(*xlim); ax.set_ylim(*ylim)
         ax.set_xlabel("False Positive Rate")
         ax.set_ylabel("True Positive Rate")

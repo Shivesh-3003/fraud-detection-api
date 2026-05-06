@@ -33,7 +33,9 @@ services:
       - ML_SERVICE_URL=http://ml-service:8000
       - ML_SERVICE_TIMEOUT=10s
       # Fraud detection settings
-      - FRAUD_THRESHOLD=0.5
+      # Classification threshold lives with the trained model
+      # (python-ml-service/models/<dataset>/optimal_threshold.json) and is
+      # applied by the Python service. The Go API consumes its is_fraud bool.
       - ALERT_ON_FRAUD=true
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - ALERT_EMAIL=${ALERT_EMAIL:-}

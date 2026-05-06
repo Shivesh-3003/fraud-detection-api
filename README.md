@@ -281,8 +281,11 @@ notes.
 | `ENV`                | `development`           | Environment              |
 | `ML_SERVICE_URL`     | `http://localhost:8000` | Python ML service URL    |
 | `ML_SERVICE_TIMEOUT` | `5s`                    | Request timeout          |
-| `FRAUD_THRESHOLD`    | `0.5`                   | Classification threshold |
 | `SLACK_WEBHOOK_URL`  | -                       | Slack alerts webhook     |
+
+The classification threshold is **not** an env var — it's read by the Python
+ML service from `python-ml-service/models/<dataset>/optimal_threshold.json`
+at startup, and the Go API consumes the `is_fraud` boolean from the response.
 
 ### Python ML Service Environment Variables
 

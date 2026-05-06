@@ -14,7 +14,7 @@ import (
 
 // noAlertCfg returns a Config with no alert destinations (Slack/email disabled).
 func noAlertCfg() *config.Config {
-	return &config.Config{FraudThreshold: 0.5}
+	return &config.Config{}
 }
 
 // VALIDATION TESTS
@@ -182,11 +182,15 @@ func TestHealthCheck_Degraded(t *testing.T) {
 }
 
 // PREDICT HANDLER TESTS
-// mockMLPredict spins up a fake ML service that returns a canned prediction
+// mockMLPredict spins up a fake ML service that returns a canned prediction.
+// The Python service applies its trained threshold and returns is_fraud; the
+// mock mirrors that with a 0.5 cut so existing test inputs (0.02 vs 0.92)
+// continue to land on the right side.
 func mockMLPredict(t *testing.T, probability float64) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := models.MLPredictResponse{
+			IsFraud:             probability >= 0.5,
 			FraudProbability:    probability,
 			ReconstructionError: 0.0042,
 		}
@@ -200,6 +204,7 @@ func mockMLPredictWithSHAP(t *testing.T, probability float64) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := models.MLPredictResponse{
+			IsFraud:             probability >= 0.5,
 			FraudProbability:    probability,
 			ReconstructionError: 0.0042,
 			ShapValues:          map[string]float64{"V1": 0.12, "V14": -0.08, "Amount_Log": 0.05},

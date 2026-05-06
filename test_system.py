@@ -98,7 +98,7 @@ def test_prediction(
         if response.status_code == 200:
             data = response.json()
             fraud_prob = data.get("fraud_probability", 0)
-            is_fraud = fraud_prob >= 0.5
+            is_fraud = bool(data.get("is_fraud", False))
             
             result_match = (is_fraud == expected_fraud) if expected_fraud is not None else True
             
