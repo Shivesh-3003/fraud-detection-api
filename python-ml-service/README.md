@@ -43,13 +43,37 @@ Response (fraud_probability + reconstruction_error + shap_values)
 
 ## Files Required
 
-Place these in the `models/` directory:
+Trained artefacts live in **per-dataset subdirectories** under `models/`. The
+service mounts a single subdirectory at runtime via the `DATASET` env var
+(default: `ulb`).
+
+```
+models/
+├── ulb/                       # default — European credit card
+│   ├── scaler.pkl
+│   ├── autoencoder_model.pth
+│   ├── mlp_classifier.pth
+│   ├── feature_config.json
+│   └── optimal_threshold.json
+└── sparkov/                   # synthetic dataset (named features, SHAP demo)
+    ├── scaler.pkl
+    ├── onehot_encoder.pkl
+    ├── autoencoder_model.pth
+    ├── mlp_classifier.pth
+    └── feature_config.json
+```
 
 | File | Description |
 |------|-------------|
 | `scaler.pkl` | Fitted StandardScaler (from preprocessing) |
+| `onehot_encoder.pkl` | OneHotEncoder for categorical features (sparkov only) |
 | `autoencoder_model.pth` | Trained Autoencoder weights |
 | `mlp_classifier.pth` | Trained MLP Classifier weights |
+| `feature_config.json` | Feature names, dims, and dataset metadata |
+| `optimal_threshold.json` | F1-optimal classification threshold (ulb only) |
+
+These files are produced by the training pipeline (`../training/`) and are not
+in git. See `models/README.md` for details on generating and staging them.
 
 ## API Endpoints
 
@@ -113,8 +137,8 @@ Prediction with SHAP explanation.
 # Install dependencies
 pip install -r requirements.txt
 
-# Set model path
-export MODEL_PATH=./models
+# Set model path to the chosen dataset subdir
+export MODEL_PATH=./models/ulb        # or ./models/sparkov
 
 # Run service
 uvicorn app.main:app --reload --port 8000
@@ -126,9 +150,13 @@ uvicorn app.main:app --reload --port 8000
 # Build
 docker build -t fraud-ml-service .
 
-# Run (mount models directory)
-docker run -p 8000:8000 -v ./models:/app/models fraud-ml-service
+# Run (mount the chosen dataset subdir as /app/models)
+docker run -p 8000:8000 -v "$(pwd)/models/ulb:/app/models:ro" fraud-ml-service
 ```
+
+In normal use you should launch via the project-root `docker-compose.yml`,
+which selects the dataset subdirectory automatically based on the `DATASET`
+env var.
 
 ## Feature Order
 

@@ -1,53 +1,89 @@
 # Model Files Directory
 
-Place your trained model files here before running the service.
+Trained model artefacts live in **per-dataset subdirectories**, one per dataset
+the system supports. The Python service mounts a single subdirectory at runtime
+based on the `DATASET` env var passed to Docker Compose.
 
-## Required Files
+## Layout
 
-| File | Description | Created By |
-|------|-------------|------------|
-| `autoencoder_model.pth` | Trained autoencoder weights | `train_autoencoder.py` |
-| `mlp_classifier.pth` | Trained MLP classifier weights | `train_classifier.py` |
+```
+models/
+├── ulb/        # European credit card (anonymous V1–V28)  — default
+│   ├── scaler.pkl
+│   ├── autoencoder_model.pth
+│   ├── mlp_classifier.pth
+│   ├── feature_config.json
+│   └── optimal_threshold.json
+└── sparkov/    # Sparkov synthetic (named features, SHAP demo)
+    ├── scaler.pkl
+    ├── onehot_encoder.pkl
+    ├── autoencoder_model.pth
+    ├── mlp_classifier.pth
+    └── feature_config.json
+```
+
+These files are produced by the training pipeline and are **not committed to
+git** (see `.gitignore`). Generate them with:
+
+```bash
+cd ../../training
+bash train_all.sh ulb       # → ../python-ml-service/models/ulb/ via copy step
+bash train_all.sh sparkov   # → ../python-ml-service/models/sparkov/
+```
+
+Then stage them for the inference service:
+
+```bash
+mkdir -p ulb sparkov
+cp ../../training/models/ulb/*     ulb/
+cp ../../training/models/sparkov/* sparkov/
+```
+
+## Selecting a dataset at runtime
+
+`docker-compose.yml` mounts `./python-ml-service/models/${DATASET:-ulb}` into
+the container at `/app/models`. Switch datasets with the `DATASET` env var:
+
+```bash
+docker-compose up                       # ulb (default)
+DATASET=sparkov docker-compose up       # sparkov
+```
+
+For local (non-Docker) runs, point `MODEL_PATH` directly at the chosen subdir:
+
+```bash
+export MODEL_PATH=$(pwd)/ulb
+uvicorn app.main:app --port 8000
+```
+
+## File reference
+
+| File | Purpose | Created by |
+|------|---------|------------|
 | `scaler.pkl` | StandardScaler fitted on normal data | `credit_card_eda_preprocessing.py` |
+| `onehot_encoder.pkl` | OneHotEncoder for categorical features (sparkov only) | `credit_card_eda_preprocessing.py` |
+| `autoencoder_model.pth` | Autoencoder weights (state dict) | `train_autoencoder.py` |
+| `mlp_classifier.pth` | MLP classifier weights (state dict) | `train_classifier.py` |
+| `feature_config.json` | Feature names, dimensions, and dataset metadata | `credit_card_eda_preprocessing.py` |
+| `optimal_threshold.json` | F1-optimal classification threshold (ulb only) | `train_classifier.py` |
 
 ## Verification
 
-After copying your files, verify they exist:
-
 ```bash
-ls -la python-ml-service/models/
-# Should show:
-# -rw-r--r--  autoencoder_model.pth
-# -rw-r--r--  mlp_classifier.pth
-# -rw-r--r--  scaler.pkl
+ls -la ulb/
+# autoencoder_model.pth  feature_config.json  mlp_classifier.pth
+# optimal_threshold.json scaler.pkl
 ```
-
-## Model Specifications
-
-### Autoencoder (`autoencoder_model.pth`)
-- **Input**: 31 features (V1-V28, Amount_Log, Hour_sin, Hour_cos)
-- **Architecture**: 31 → 20 → 14 → 8 → 14 → 20 → 31
-- **Activation**: Tanh
-- **Purpose**: Generates reconstruction error as anomaly signal
-
-### MLP Classifier (`mlp_classifier.pth`)
-- **Input**: 32 features (31 original + Reconstruction_Error)
-- **Architecture**: 32 → 16 → 1
-- **Activation**: ReLU + Dropout(0.3)
-- **Output**: Logits (apply sigmoid for probability)
-
-### Scaler (`scaler.pkl`)
-- **Type**: sklearn.preprocessing.StandardScaler
-- **Fitted on**: Normal transactions only (Class 0)
-- **Features**: 31 (V1-V28, Amount_Log, Hour_sin, Hour_cos)
 
 ## Troubleshooting
 
-If you see "Model not found" errors:
-1. Check file names match exactly (case-sensitive)
-2. Ensure files are in this directory, not a subdirectory
-3. Verify file permissions (readable)
+**"Model not found" / "feature_config.json missing"**
+1. Confirm files are inside the per-dataset subdirectory (not at the top level
+   of `models/`)
+2. Run the training pipeline if any are absent
+3. Check that `DATASET` env var matches an existing subdirectory
 
-If you see "state_dict" errors:
-1. Models must be saved with `torch.save(model.state_dict(), path)`
-2. Architecture must match exactly what's defined in `app/ml_models.py`
+**"state_dict" / shape errors**
+- Models must be saved with `torch.save(model.state_dict(), path)`
+- Architecture in `app/ml_models.py` must match the dimensions in
+  `feature_config.json` for that dataset

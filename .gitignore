@@ -26,17 +26,9 @@ go-api/fraud-detection-api
 *.swp
 *.swo
 
-# ── Training data & model artifacts ───────────────────────────────────────────
-# Large files — not suitable for git (use Git LFS or external storage)
+# ── Training data & intermediate artefacts ───────────────────────────────────
+# Raw datasets are excluded due to Kaggle ToS (must be downloaded by the user)
 training/data/
+
+# Source-side training artefacts
 training/models/
-
-# Generated analysis artifacts (regenerable from training/analysis/*.py)
-training/analysis/outputs/
-training/evaluation_plots/
-training/plots/
-
-# ── Docker ────────────────────────────────────────────────────────────────────
-# Model files are large binaries — keep them out of git if re-training locally
-# python-ml-service/models/*.pth
-# python-ml-service/models/*.pkl

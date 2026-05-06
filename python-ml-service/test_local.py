@@ -6,10 +6,11 @@ This script tests the ML pipeline components locally without starting the HTTP s
 Run this to verify your models are correctly loaded before deploying.
 
 Usage:
-    python test_local.py
+    python test_local.py            # default: ulb dataset
+    DATASET=sparkov python test_local.py
 
 Requirements:
-    - Model files in ./models/ directory
+    - Model files in ./models/<dataset>/ directory
     - Python dependencies installed
 """
 
@@ -20,8 +21,9 @@ import numpy as np
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Set model path for local testing
-os.environ["MODEL_PATH"] = os.path.join(os.path.dirname(__file__), "models")
+# Set model path for local testing — defaults to ulb subdir
+_dataset = os.environ.get("DATASET", "ulb")
+os.environ["MODEL_PATH"] = os.path.join(os.path.dirname(__file__), "models", _dataset)
 
 
 def test_pipeline():
