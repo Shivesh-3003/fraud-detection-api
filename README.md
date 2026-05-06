@@ -1,4 +1,4 @@
-# Fraud Detection System
+# HIGH-PERFORMANCE REAL-TIME FRAUD DETECTION SYSTEM
 
 A real-time fraud detection system with explainability, built as a microservices architecture.
 
